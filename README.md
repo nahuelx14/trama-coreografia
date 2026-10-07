@@ -19,6 +19,9 @@ Aplicación pública: <https://nahuelx14.github.io/trama-coreografia/>
 - Biblioteca de múltiples coreografías sincronizadas con Supabase.
 - Registro e inicio de sesión mediante correo y contraseña.
 - Creación, apertura, renombrado, duplicado y eliminación de coreografías guardadas en la nube.
+- Recuperación de contraseña por correo electrónico.
+- Códigos para copiar una coreografía a otra cuenta.
+- MP3 privados sincronizados entre dispositivos mediante Supabase Storage.
 
 ## Ejecutar localmente
 
@@ -49,4 +52,4 @@ supabase/
 
 ## Datos y privacidad
 
-La rutina y sus marcas de tiempo se guardan automáticamente en el navegador. Al iniciar sesión, las coreografías también se sincronizan con Supabase y quedan asociadas al usuario mediante políticas Row Level Security. También se puede descargar un archivo de proyecto para conservar una copia. El archivo MP3 nunca se sube ni se incluye en los archivos exportados: debe seleccionarse nuevamente al reabrir la página. La configuración necesaria de Supabase está documentada en [`SUPABASE.md`](SUPABASE.md).
+La rutina y sus marcas de tiempo se guardan automáticamente en el navegador. Al iniciar sesión, las coreografías y sus MP3 se sincronizan con Supabase y quedan protegidos mediante políticas Row Level Security. Al copiar una coreografía mediante su código, se crea una edición independiente que conserva acceso al audio asociado. Los MP3 no se incluyen en los archivos `.trama.json` exportados. La configuración necesaria de Supabase está documentada en [`SUPABASE.md`](SUPABASE.md).

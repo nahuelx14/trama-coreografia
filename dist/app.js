@@ -4,6 +4,8 @@
   const ACTIVE_CLOUD_KEY = 'trama-coreografia-cloud-active-v1';
   const SUPABASE_URL = 'https://fpjeqyhpmzmzxbuqlhup.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_hnODMTLL-bD0ZDM13HSG_A_4ChWnanP';
+  const AUDIO_BUCKET = 'choreography-audio';
+  const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
   const cloudClient = window.supabase?.createClient ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY) : null;
   const palette = ['#ff5b5b','#ff9f43','#f4cd3a','#5cc78b','#35a7a0','#4d8fe6','#6c63d9','#a45ed0','#ef6da8','#795548','#1f2937','#9ba2aa'];
   const defaultDancers = [
@@ -31,18 +33,22 @@
   let activeCloudId = null;
   let cloudSaveTimer = null;
   let cloudHydrating = false;
+  let activeAudioPath = null;
+  let selectedAudioFile = null;
+  let passwordRecoveryMode = false;
 
   const $ = id => document.getElementById(id);
   const els = {
     stage:$('stage'), grid:$('grid'), dancerLayer:$('dancerLayer'), dancerList:$('dancerList'), formationsList:$('formationsList'),
     formationTitle:$('formationTitle'), dancerCount:$('dancerCount'), formationCount:$('formationCount'), rows:$('rowsInput'), cols:$('colsInput'),
     frontSide:$('frontSide'), stageFrame:$('stageFrame'), frontArrow:$('frontArrow'),
-    audio:$('audio'), audioInput:$('audioInput'), audioPlay:$('audioPlayBtn'), audioSeek:$('audioSeek'), audioCurrent:$('audioCurrent'), audioDuration:$('audioDuration'), musicFileName:$('musicFileName'), musicPrivacy:$('musicPrivacy'), fileButtonText:$('fileButtonText'),
+    audio:$('audio'), audioInput:$('audioInput'), audioPlay:$('audioPlayBtn'), audioSeek:$('audioSeek'), audioCurrent:$('audioCurrent'), audioDuration:$('audioDuration'), musicFileName:$('musicFileName'), musicPrivacy:$('musicPrivacy'), musicEyebrow:$('musicEyebrow'), fileButtonText:$('fileButtonText'), fileButton:document.querySelector('.file-button'),
     routineName:$('routineName'), dialog:$('dancerDialog'), dancerForm:$('dancerForm'), dancerName:$('dancerName'), dialogTitle:$('dialogTitle'),
     colorOptions:$('colorOptions'), customColor:$('customColor'), toast:$('toast'), playBtn:$('playBtn'), playIcon:$('playIcon'),
     playStatus:$('playStatus'), playDetail:$('playDetail'), progressFill:$('progressFill'), progressCurrent:$('progressCurrent'), progressNext:$('progressNext'), speed:$('speedSelect'),
     saveState:$('saveState'), saveStateText:$('saveStateText'), cloudDialog:$('cloudDialog'), cloudSignedOut:$('cloudSignedOut'), cloudSignedIn:$('cloudSignedIn'),
-    cloudEmail:$('cloudEmail'), cloudPassword:$('cloudPassword'), cloudLoginBtn:$('cloudLoginBtn'), cloudSignUpBtn:$('cloudSignUpBtn'), cloudAuthMessage:$('cloudAuthMessage'), cloudUserEmail:$('cloudUserEmail'), cloudList:$('cloudList'), cloudLibraryMessage:$('cloudLibraryMessage')
+    cloudEmail:$('cloudEmail'), cloudPassword:$('cloudPassword'), cloudLoginBtn:$('cloudLoginBtn'), cloudSignUpBtn:$('cloudSignUpBtn'), cloudAuthMessage:$('cloudAuthMessage'), cloudUserEmail:$('cloudUserEmail'), cloudList:$('cloudList'), cloudLibraryMessage:$('cloudLibraryMessage'),
+    cloudPasswordRecovery:$('cloudPasswordRecovery'), recoveryPassword:$('recoveryPassword'), recoveryPasswordConfirm:$('recoveryPasswordConfirm'), recoveryMessage:$('recoveryMessage'), shareCodeInput:$('shareCodeInput')
   };
 
   function uid(){ return 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -83,11 +89,18 @@
     if(text.includes(':')){ const parts=text.split(':').map(Number); if(parts.some(n=>!Number.isFinite(n))||parts.length>2) return NaN; return Math.max(0,parts[0]*60+parts[1]); }
     const seconds=Number(text); return Number.isFinite(seconds)?Math.max(0,seconds):NaN;
   }
+  function clearAudioPlayer(){
+    els.audio.pause();if(audioUrl?.startsWith('blob:'))URL.revokeObjectURL(audioUrl);audioUrl=null;audioReady=false;els.audio.removeAttribute('src');els.audio.load();els.audioInput.value='';els.audioPlay.disabled=true;els.audioSeek.disabled=true;els.audioCurrent.textContent='0:00';els.audioDuration.textContent='0:00';
+  }
+  function prepareAudioSource(url,name,fromCloud){
+    if(audioUrl?.startsWith('blob:'))URL.revokeObjectURL(audioUrl);stopPlayback(false);audioUrl=url;audioReady=true;state.musicName=name||'Canción de la coreografía';els.audio.src=url;els.audio.load();els.musicEyebrow.textContent=fromCloud?'MÚSICA EN LA NUBE':'MÚSICA LOCAL';els.musicFileName.textContent=state.musicName;els.musicPrivacy.textContent=fromCloud?'Disponible desde cualquier dispositivo con acceso a esta coreografía.':'Lista en este dispositivo. Guardá la coreografía en la nube para sincronizarla.';els.fileButtonText.textContent='Cambiar MP3';els.audioPlay.disabled=false;els.audioSeek.disabled=false;renderFormations();updatePlaybackLabels();
+  }
   function renderMusicStatus(){
     if(audioReady) return;
-    els.musicFileName.textContent=state.musicName?`Volvé a seleccionar: ${state.musicName}`:'Sumá la canción de la rutina';
-    els.musicPrivacy.textContent=state.musicName?'Los tiempos están guardados. El archivo de audio no se conserva por privacidad.':'El audio queda en tu dispositivo; al reabrir tendrás que seleccionarlo otra vez.';
-    els.fileButtonText.textContent=state.musicName?'Volver a elegir':'Elegir MP3';
+    els.musicEyebrow.textContent=activeAudioPath?'MÚSICA EN LA NUBE':'MÚSICA LOCAL';
+    els.musicFileName.textContent=activeAudioPath?(state.musicName||'Canción guardada'):state.musicName?`Volvé a seleccionar: ${state.musicName}`:'Sumá la canción de la rutina';
+    els.musicPrivacy.textContent=activeAudioPath?'Cargando el audio guardado…':state.musicName?'La canción todavía no está disponible en este dispositivo.':'Si la coreografía está en la nube, el MP3 también se sincroniza.';
+    els.fileButtonText.textContent=state.musicName?'Cambiar MP3':'Elegir MP3';
   }
   function renderDancers(displayPositions){
     const positions = displayPositions || currentFormation().positions;
@@ -202,11 +215,31 @@
     renderDancers(inter); els.progressFill.style.width=`${p*100}%`; els.progressCurrent.textContent=String(playback.from+1).padStart(2,'0');els.progressNext.textContent=String(playback.to+1).padStart(2,'0');
     if(p>=1){state.activeFormation=playback.to;playback.from=playback.to;playback.to=(playback.to+1)%state.formations.length;playback.started=now+260;playback.pausedAt=0;renderFormations();} playback.frame=requestAnimationFrame(tickPlayback);
   }
-  function handleAudioFile(event){
+  async function uploadAudioToCloud(file,choreographyId){
+    if(!cloudClient||!cloudSession||!choreographyId)return false;
+    const path=`${cloudSession.user.id}/${choreographyId}/${crypto.randomUUID()}.mp3`;
+    els.fileButton.classList.add('uploading');els.fileButtonText.textContent='Subiendo…';setSaveStatus('Subiendo canción…','pending');
+    const {error:uploadError}=await cloudClient.storage.from(AUDIO_BUCKET).upload(path,file,{contentType:'audio/mpeg',cacheControl:'3600',upsert:false});
+    if(uploadError){els.fileButton.classList.remove('uploading');els.fileButtonText.textContent='Cambiar MP3';setSaveStatus('Error al subir la canción','error');showToast(cloudErrorMessage(uploadError,'No pudimos guardar el MP3.'));return false;}
+    const updatedAt=new Date().toISOString();
+    const {error:updateError}=await cloudClient.from('choreographies').update({audio_path:path,audio_name:file.name,updated_at:updatedAt}).eq('id',choreographyId).eq('user_id',cloudSession.user.id);
+    if(updateError){await cloudClient.storage.from(AUDIO_BUCKET).remove([path]);els.fileButton.classList.remove('uploading');els.fileButtonText.textContent='Cambiar MP3';setSaveStatus('Error al guardar la canción','error');showToast('El MP3 se subió, pero no pudimos asociarlo a la coreografía.');return false;}
+    if(choreographyId===activeCloudId){activeAudioPath=path;state.musicName=file.name;localStorage.setItem(STORAGE_KEY,JSON.stringify(state));els.musicEyebrow.textContent='MÚSICA EN LA NUBE';els.musicPrivacy.textContent='Guardada en la nube y disponible desde tus otros dispositivos.';}
+    const item=cloudItems.find(entry=>entry.id===choreographyId);if(item){item.audio_path=path;item.audio_name=file.name;item.updated_at=updatedAt;if(els.cloudDialog.open)renderCloudList();}
+    els.fileButton.classList.remove('uploading');els.fileButtonText.textContent='Cambiar MP3';setSaveStatus('Guardado en la nube');showToast('Canción guardada en la nube');return true;
+  }
+  async function loadCloudAudio(path,name){
+    clearAudioPlayer();activeAudioPath=path||null;state.musicName=cleanText(name,state.musicName||'',120);renderMusicStatus();if(!path)return;
+    const {data,error}=await cloudClient.storage.from(AUDIO_BUCKET).createSignedUrl(path,3600);
+    if(error||!data?.signedUrl){els.musicPrivacy.textContent='No pudimos cargar la canción guardada. Probá abrir la coreografía otra vez.';showToast(cloudErrorMessage(error,'No pudimos cargar el MP3.'));return;}
+    prepareAudioSource(data.signedUrl,state.musicName,true);
+  }
+  async function handleAudioFile(event){
     const file=event.target.files?.[0]; if(!file)return;
     if(!(file.type.startsWith('audio/')||file.name.toLowerCase().endsWith('.mp3'))){showToast('Elegí un archivo MP3 válido');event.target.value='';return;}
-    if(audioUrl)URL.revokeObjectURL(audioUrl); stopPlayback(false); audioUrl=URL.createObjectURL(file); audioReady=true; state.musicName=file.name; saveState();
-    els.audio.src=audioUrl; els.audio.load(); els.musicFileName.textContent=file.name; els.musicPrivacy.textContent='Reproducción privada desde este dispositivo. Las marcas se guardan; el audio no.'; els.fileButtonText.textContent='Cambiar MP3'; els.audioPlay.disabled=false; els.audioSeek.disabled=false; renderFormations();updatePlaybackLabels();showToast('Música lista para sincronizar');
+    if(file.size>MAX_AUDIO_BYTES){showToast('El MP3 supera el máximo de 50 MB');event.target.value='';return;}
+    selectedAudioFile=file;state.musicName=file.name;prepareAudioSource(URL.createObjectURL(file),file.name,false);saveState();showToast('Música lista para sincronizar');
+    if(cloudSession&&activeCloudId)await uploadAudioToCloud(file,activeCloudId);
   }
   function toggleAudio(){ if(!audioReady)return; els.audio.paused?els.audio.play().catch(()=>showToast('No pudimos reproducir este archivo')):els.audio.pause(); }
   function updateAudioTime(){
@@ -248,39 +281,45 @@
     setSaveStatus('Guardado en la nube');if(els.cloudDialog.open)renderCloudList();
   }
   function renderCloudViews(){
-    const signedIn=Boolean(cloudSession);els.cloudSignedOut.hidden=signedIn;els.cloudSignedIn.hidden=!signedIn;
+    const signedIn=Boolean(cloudSession);els.cloudPasswordRecovery.hidden=!passwordRecoveryMode;els.cloudSignedOut.hidden=passwordRecoveryMode||signedIn;els.cloudSignedIn.hidden=passwordRecoveryMode||!signedIn;
     if(signedIn)els.cloudUserEmail.textContent=cloudSession.user.email||'Sesión iniciada';
   }
   function formatCloudDate(value){
     try{return new Intl.DateTimeFormat('es-AR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(value));}catch{return 'Guardada';}
+  }
+  function normalizedShareCode(value){return String(value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);}
+  function formattedShareCode(value){const code=normalizedShareCode(value);return code.match(/.{1,4}/g)?.join('-')||'';}
+  async function copyShareCode(item){
+    const code=formattedShareCode(item.share_code);try{await navigator.clipboard.writeText(code);showToast(`Código ${code} copiado`);}catch{prompt('Copiá este código para compartir la coreografía:',code);}
   }
   function renderCloudList(){
     els.cloudList.innerHTML='';
     if(!cloudItems.length){const empty=document.createElement('div');empty.className='cloud-empty';empty.textContent='Todavía no guardaste coreografías en la nube.';els.cloudList.appendChild(empty);return;}
     cloudItems.forEach(item=>{
       const row=document.createElement('article');row.className='cloud-routine'+(item.id===activeCloudId?' active':'');
-      const open=document.createElement('button');open.type='button';open.className='cloud-open';open.innerHTML=`<strong>${escapeHtml(item.name||'Sin título')}</strong><small>${item.id===activeCloudId?'Abierta ahora · ':''}Actualizada ${escapeHtml(formatCloudDate(item.updated_at))}</small>`;open.onclick=()=>openCloudRoutine(item.id,true);
+      const open=document.createElement('button');open.type='button';open.className='cloud-open';open.innerHTML=`<strong>${escapeHtml(item.name||'Sin título')}</strong><small>${item.id===activeCloudId?'Abierta ahora · ':''}${item.audio_path?'♫ Con canción · ':''}Actualizada ${escapeHtml(formatCloudDate(item.updated_at))}</small><code>${escapeHtml(formattedShareCode(item.share_code))}</code>`;open.onclick=()=>openCloudRoutine(item.id,true);
       const actions=document.createElement('div');actions.className='cloud-item-actions';
+      const share=document.createElement('button');share.type='button';share.title='Copiar código';share.setAttribute('aria-label',`Copiar código de ${item.name}`);share.textContent='#';share.onclick=()=>copyShareCode(item);
       const rename=document.createElement('button');rename.type='button';rename.title='Renombrar';rename.setAttribute('aria-label',`Renombrar ${item.name}`);rename.textContent='✎';rename.onclick=()=>renameCloudRoutine(item.id);
       const duplicate=document.createElement('button');duplicate.type='button';duplicate.title='Duplicar';duplicate.setAttribute('aria-label',`Duplicar ${item.name}`);duplicate.textContent='⧉';duplicate.onclick=()=>duplicateCloudRoutine(item.id);
       const remove=document.createElement('button');remove.type='button';remove.className='delete';remove.title='Eliminar';remove.setAttribute('aria-label',`Eliminar ${item.name}`);remove.textContent='×';remove.onclick=()=>deleteCloudRoutine(item.id);
-      actions.append(rename,duplicate,remove);row.append(open,actions);els.cloudList.appendChild(row);
+      actions.append(share,rename,duplicate,remove);row.append(open,actions);els.cloudList.appendChild(row);
     });
   }
   async function refreshCloudList(){
     if(!cloudClient||!cloudSession)return false;
     els.cloudLibraryMessage.textContent='Cargando coreografías…';els.cloudLibraryMessage.classList.remove('error');
-    const {data,error}=await cloudClient.from('choreographies').select('id,name,created_at,updated_at').order('updated_at',{ascending:false});
+    const {data,error}=await cloudClient.from('choreographies').select('id,name,share_code,audio_path,audio_name,created_at,updated_at').order('updated_at',{ascending:false});
     if(error){cloudItems=[];renderCloudList();els.cloudLibraryMessage.textContent=cloudErrorMessage(error);els.cloudLibraryMessage.classList.add('error');return false;}
     cloudItems=data||[];renderCloudList();els.cloudLibraryMessage.textContent=cloudItems.length?`${cloudItems.length} ${cloudItems.length===1?'coreografía guardada':'coreografías guardadas'}`:'';return true;
   }
   async function openCloudRoutine(id,closeDialog){
     if(!cloudClient||!cloudSession)return;
     els.cloudLibraryMessage.textContent='Abriendo coreografía…';els.cloudLibraryMessage.classList.remove('error');
-    const {data,error}=await cloudClient.from('choreographies').select('id,name,data,updated_at').eq('id',id).single();
+    const {data,error}=await cloudClient.from('choreographies').select('id,name,data,audio_path,audio_name,updated_at').eq('id',id).single();
     if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos abrir esta coreografía.');els.cloudLibraryMessage.classList.add('error');return;}
     try{
-      cloudHydrating=true;state=importedProject(data.data);state.routineName=cleanText(data.name,state.routineName,60);activeCloudId=data.id;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll();setSaveStatus('Guardado en la nube');
+      cloudHydrating=true;selectedAudioFile=null;state=importedProject(data.data);state.routineName=cleanText(data.name,state.routineName,60);state.musicName=cleanText(data.audio_name,state.musicName||'',120);activeCloudId=data.id;activeAudioPath=data.audio_path||null;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));clearAudioPlayer();renderAll();await loadCloudAudio(activeAudioPath,state.musicName);setSaveStatus('Guardado en la nube');
       await refreshCloudList();if(closeDialog)els.cloudDialog.close();showToast(`Abriste “${state.routineName}”`);
     }catch{els.cloudLibraryMessage.textContent='Esta coreografía tiene datos que no pudimos leer.';els.cloudLibraryMessage.classList.add('error');}
     finally{cloudHydrating=false;}
@@ -293,7 +332,7 @@
     const draft=freshState();draft.routineName=nextCloudName();els.cloudLibraryMessage.textContent='Creando coreografía…';
     const {data,error}=await cloudClient.from('choreographies').insert({user_id:cloudSession.user.id,name:draft.routineName,data:draft}).select('id,name,created_at,updated_at').single();
     if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos crear la coreografía.');els.cloudLibraryMessage.classList.add('error');return;}
-    cloudHydrating=true;state=draft;activeCloudId=data.id;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll();cloudHydrating=false;await refreshCloudList();setSaveStatus('Guardado en la nube');els.cloudDialog.close();showToast(`${draft.routineName} creada`);
+    cloudHydrating=true;clearAudioPlayer();selectedAudioFile=null;activeAudioPath=null;state=draft;activeCloudId=data.id;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll();cloudHydrating=false;await refreshCloudList();setSaveStatus('Guardado en la nube');els.cloudDialog.close();showToast(`${draft.routineName} creada`);
   }
   async function uploadCurrentRoutine(){
     if(!cloudClient||!cloudSession)return;
@@ -301,7 +340,7 @@
     els.cloudLibraryMessage.textContent='Guardando la rutina actual…';els.cloudLibraryMessage.classList.remove('error');
     const {data,error}=await cloudClient.from('choreographies').insert({user_id:cloudSession.user.id,name,data:cloudPayload()}).select('id,name,created_at,updated_at').single();
     if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos guardar esta rutina.');els.cloudLibraryMessage.classList.add('error');return;}
-    activeCloudId=data.id;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));await refreshCloudList();setSaveStatus('Guardado en la nube');els.cloudDialog.close();showToast('Rutina guardada en la nube');
+    activeCloudId=data.id;activeAudioPath=null;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));if(selectedAudioFile)await uploadAudioToCloud(selectedAudioFile,activeCloudId);await refreshCloudList();setSaveStatus('Guardado en la nube');els.cloudDialog.close();showToast('Rutina guardada en la nube');
   }
   async function renameCloudRoutine(id){
     const item=cloudItems.find(entry=>entry.id===id);if(!item)return;const name=prompt('Nuevo nombre:',item.name);if(!name?.trim())return;const safeName=cleanText(name,item.name,60);
@@ -311,10 +350,10 @@
     await refreshCloudList();showToast('Coreografía renombrada');
   }
   async function duplicateCloudRoutine(id){
-    const {data:source,error:readError}=await cloudClient.from('choreographies').select('name,data').eq('id',id).single();
+    const {data:source,error:readError}=await cloudClient.from('choreographies').select('name,data,audio_path,audio_name').eq('id',id).single();
     if(readError){els.cloudLibraryMessage.textContent='No pudimos duplicar esta coreografía.';return;}
     const copy=importedProject(source.data);copy.routineName=cleanText(`${source.name} copia`,'Copia',60);
-    const {data,error}=await cloudClient.from('choreographies').insert({user_id:cloudSession.user.id,name:copy.routineName,data:copy}).select('id').single();
+    const {data,error}=await cloudClient.from('choreographies').insert({user_id:cloudSession.user.id,name:copy.routineName,data:copy,audio_path:source.audio_path||null,audio_name:source.audio_name||null}).select('id').single();
     if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos duplicar esta coreografía.');els.cloudLibraryMessage.classList.add('error');return;}
     await refreshCloudList();await openCloudRoutine(data.id,true);showToast('Coreografía duplicada');
   }
@@ -322,8 +361,31 @@
     const item=cloudItems.find(entry=>entry.id===id);if(!item||!confirm(`¿Eliminar “${item.name}” de la nube? Esta acción no se puede deshacer.`))return;
     const {error}=await cloudClient.from('choreographies').delete().eq('id',id);
     if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos eliminar esta coreografía.');els.cloudLibraryMessage.classList.add('error');return;}
-    if(id===activeCloudId){activeCloudId=null;localStorage.removeItem(ACTIVE_CLOUD_KEY);setSaveStatus('Guardado en este dispositivo');}
+    if(id===activeCloudId){activeCloudId=null;activeAudioPath=null;localStorage.removeItem(ACTIVE_CLOUD_KEY);if(audioReady){els.musicEyebrow.textContent='MÚSICA LOCAL';els.musicPrivacy.textContent=selectedAudioFile?'Lista en este dispositivo.':'La canción ya no está vinculada a una coreografía en la nube.';}else renderMusicStatus();setSaveStatus('Guardado en este dispositivo');}
     await refreshCloudList();showToast('Coreografía eliminada');
+  }
+  async function redeemShareCode(event){
+    event.preventDefault();if(!cloudClient||!cloudSession)return;const code=normalizedShareCode(els.shareCodeInput.value);
+    if(code.length!==12){els.cloudLibraryMessage.textContent='El código debe tener 12 caracteres.';els.cloudLibraryMessage.classList.add('error');return;}
+    els.cloudLibraryMessage.textContent='Copiando coreografía…';els.cloudLibraryMessage.classList.remove('error');
+    const {data,error}=await cloudClient.rpc('copy_choreography_by_code',{p_code:code});
+    if(error||!data){els.cloudLibraryMessage.textContent='No encontramos una coreografía con ese código.';els.cloudLibraryMessage.classList.add('error');return;}
+    els.shareCodeInput.value='';await refreshCloudList();await openCloudRoutine(data,true);showToast('Coreografía copiada a tu cuenta');
+  }
+  async function requestPasswordReset(){
+    if(!cloudClient)return;const email=els.cloudEmail.value.trim();if(!email){els.cloudAuthMessage.textContent='Escribí primero el correo de tu cuenta.';els.cloudAuthMessage.classList.add('error');return;}
+    els.cloudAuthMessage.textContent='Enviando enlace…';els.cloudAuthMessage.classList.remove('error');
+    const redirectTo=`${location.origin}${location.pathname}`;const {error}=await cloudClient.auth.resetPasswordForEmail(email,{redirectTo});
+    if(error){els.cloudAuthMessage.textContent=cloudErrorMessage(error,'No pudimos enviar el correo de recuperación.');els.cloudAuthMessage.classList.add('error');return;}
+    els.cloudAuthMessage.textContent='Te enviamos un correo. Abrí el enlace para elegir una contraseña nueva.';
+  }
+  async function handlePasswordRecovery(event){
+    event.preventDefault();const password=els.recoveryPassword.value;const confirmation=els.recoveryPasswordConfirm.value;
+    if(password.length<8){els.recoveryMessage.textContent='La contraseña debe tener al menos ocho caracteres.';els.recoveryMessage.classList.add('error');return;}
+    if(password!==confirmation){els.recoveryMessage.textContent='Las contraseñas no coinciden.';els.recoveryMessage.classList.add('error');return;}
+    els.recoveryMessage.textContent='Guardando contraseña…';els.recoveryMessage.classList.remove('error');
+    const {error}=await cloudClient.auth.updateUser({password});if(error){els.recoveryMessage.textContent=cloudErrorMessage(error,'No pudimos cambiar la contraseña.');els.recoveryMessage.classList.add('error');return;}
+    passwordRecoveryMode=false;els.recoveryPassword.value='';els.recoveryPasswordConfirm.value='';renderCloudViews();await refreshCloudList();showToast('Contraseña actualizada');
   }
   async function handleCloudLogin(event){
     event.preventDefault();if(!cloudClient)return;const email=els.cloudEmail.value.trim();const password=els.cloudPassword.value;if(!email||password.length<8){els.cloudAuthMessage.textContent='Ingresá un correo válido y una contraseña de al menos ocho caracteres.';els.cloudAuthMessage.classList.add('error');return;}
@@ -342,7 +404,7 @@
   }
   async function applyCloudSession(session,loadInitial){
     cloudSession=session;renderCloudViews();
-    if(!session){activeCloudId=null;cloudItems=[];localStorage.removeItem(ACTIVE_CLOUD_KEY);renderCloudList();setSaveStatus('Guardado en este dispositivo');return;}
+    if(!session){if(activeAudioPath)clearAudioPlayer();activeAudioPath=null;activeCloudId=null;cloudItems=[];localStorage.removeItem(ACTIVE_CLOUD_KEY);renderCloudList();renderMusicStatus();setSaveStatus('Guardado en este dispositivo');return;}
     const loaded=await refreshCloudList();if(!loaded)return;
     const storedId=localStorage.getItem(ACTIVE_CLOUD_KEY);const first=cloudItems.find(item=>item.id===storedId)||cloudItems[0];
     if(loadInitial&&first)await openCloudRoutine(first.id,false);else if(activeCloudId)setSaveStatus('Guardado en la nube');
@@ -351,7 +413,7 @@
     if(!cloudClient){setSaveStatus('Nube no disponible','error');return;}
     const {data,error}=await cloudClient.auth.getSession();if(error){setSaveStatus('Nube no disponible','error');return;}
     await applyCloudSession(data.session,true);
-    cloudClient.auth.onAuthStateChange((event,session)=>{if(event==='INITIAL_SESSION')return;setTimeout(()=>applyCloudSession(session,event==='SIGNED_IN'),0);});
+    cloudClient.auth.onAuthStateChange((event,session)=>{if(event==='INITIAL_SESSION')return;setTimeout(async()=>{if(event==='PASSWORD_RECOVERY'){cloudSession=session;passwordRecoveryMode=true;renderCloudViews();if(!els.cloudDialog.open)els.cloudDialog.showModal();return;}await applyCloudSession(session,event==='SIGNED_IN');},0);});
   }
 
   function fileSlug(value){
@@ -396,7 +458,7 @@
       if(file.size>5*1024*1024)throw new Error('El archivo es demasiado grande. El máximo es 5 MB.');
       const next=importedProject(JSON.parse(await file.text()));
       if(!confirm(`Abrir “${next.routineName}” reemplazará la rutina actual en este dispositivo. ¿Continuar?`))return;
-      stopPlayback(false); if(audioUrl)URL.revokeObjectURL(audioUrl); audioUrl=null;audioReady=false;els.audio.pause();els.audio.removeAttribute('src');els.audio.load();els.audioInput.value='';
+      stopPlayback(false);clearAudioPlayer();selectedAudioFile=null;activeAudioPath=null;
       activeCloudId=null;localStorage.removeItem(ACTIVE_CLOUD_KEY);state=next;saveState();renderAll();showToast('Proyecto abierto y guardado');
     } catch(error){ showToast(error instanceof Error?error.message:'No pudimos abrir este proyecto.'); }
     finally { input.value=''; }
@@ -426,7 +488,7 @@
   $('exportProjectBtn').onclick=exportProject;$('importProjectInput').onchange=importProjectFile;$('exportCsvBtn').onclick=exportCsv;$('exportSheetsBtn').onclick=exportSheets;
   $('cloudLibraryBtn').onclick=()=>{renderCloudViews();renderCloudList();els.cloudDialog.showModal();if(cloudSession)refreshCloudList();};
   $('closeCloudDialog').onclick=()=>els.cloudDialog.close();$('cloudLoginForm').onsubmit=handleCloudLogin;
-  $('cloudSignUpBtn').onclick=handleCloudSignUp;
+  $('cloudSignUpBtn').onclick=handleCloudSignUp;$('forgotPasswordBtn').onclick=requestPasswordReset;$('passwordRecoveryForm').onsubmit=handlePasswordRecovery;$('shareCodeForm').onsubmit=redeemShareCode;
   $('cloudSignOutBtn').onclick=async()=>{if(cloudClient)await cloudClient.auth.signOut();els.cloudDialog.close();showToast('Sesión cerrada');};
   $('newCloudRoutineBtn').onclick=createCloudRoutine;$('uploadCurrentBtn').onclick=uploadCurrentRoutine;
   $('closeDialog').onclick=$('cancelDialog').onclick=()=>els.dialog.close(); els.dancerForm.addEventListener('submit',submitDancer);

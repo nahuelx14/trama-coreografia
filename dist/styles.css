@@ -116,6 +116,7 @@ kbd { font-family: inherit; background: white; border: 1px solid var(--line); bo
 .music-info small { margin-top: 3px; color: var(--muted); font-size: 9px; line-height: 1.35; }
 .file-button { cursor: pointer; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: 10px; font-weight: 800; background: white; color: var(--navy); white-space: nowrap; }
 .file-button:hover { border-color: var(--accent); color: var(--accent-dark); }
+.file-button.uploading { pointer-events: none; opacity: .62; }
 .file-button input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
 .music-transport { grid-column: 1 / -1; display: grid; grid-template-columns: 30px 34px minmax(100px,1fr) 34px; align-items: center; gap: 8px; color: var(--muted); font-size: 9px; }
 .audio-play { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--navy); color: white; cursor: pointer; font-size: 9px; }
@@ -186,12 +187,19 @@ legend { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; font-
 .cloud-password-field { margin-top: 13px; }
 .cloud-login-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
 .cloud-login-actions button { width: 100%; }
+.forgot-password { display: block; margin: 12px auto 0; border: 0; background: transparent; color: var(--accent-dark); cursor: pointer; font-size: 10px; font-weight: 800; }
+.forgot-password:hover { text-decoration: underline; }
 .text-button.bordered { border: 1px solid var(--line); }
 .cloud-message { min-height: 18px; margin: 12px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .cloud-message.error { color: var(--accent-dark); }
 .cloud-account-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -8px 0 16px; padding-bottom: 13px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 .cloud-library-actions { display: flex; gap: 8px; margin-bottom: 16px; }
 .cloud-library-actions .bordered { border: 1px solid var(--line); }
+.share-code-form { margin-bottom: 16px; padding: 12px; border-radius: 10px; background: #f4f1eb; }
+.share-code-form > label { display: block; margin-bottom: 7px; color: var(--ink); font-size: 10px; font-weight: 800; }
+.share-code-form > div { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 7px; }
+.share-code-form input { min-width: 0; border: 1px solid var(--line); border-radius: 7px; padding: 9px 10px; background: white; color: var(--ink); font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
+.share-code-form small { display: block; margin-top: 7px; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .cloud-list { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; padding-right: 3px; }
 .cloud-empty { padding: 35px 16px; border: 1px dashed var(--line); border-radius: 11px; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .cloud-routine { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
@@ -199,10 +207,12 @@ legend { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; font-
 .cloud-open { min-width: 0; border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; }
 .cloud-open strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Georgia,serif; font-size: 15px; }
 .cloud-open small { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; }
+.cloud-open code { display: inline-block; margin-top: 5px; padding: 2px 5px; border-radius: 4px; background: #f1efe9; color: var(--navy); font-family: ui-monospace,Consolas,monospace; font-size: 9px; letter-spacing: .08em; }
 .cloud-item-actions { display: flex; gap: 2px; }
 .cloud-item-actions button { width: 29px; height: 29px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
 .cloud-item-actions button:hover { background: #efede8; color: var(--ink); }
 .cloud-item-actions .delete:hover { background: #fff0f0; color: #c33; }
+.recovery-submit { margin-top: 17px; }
 .toast { position: fixed; left: 50%; bottom: 24px; z-index: 90; transform: translate(-50%, 20px); padding: 10px 16px; border-radius: 8px; background: var(--ink); color: white; font-size: 12px; opacity: 0; pointer-events: none; transition: .25s ease; box-shadow: var(--shadow); }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 @media (max-width: 1050px) {

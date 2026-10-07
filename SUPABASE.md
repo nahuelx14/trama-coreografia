@@ -6,7 +6,7 @@ La aplicación usa Supabase Auth y una fila JSON por coreografía. La clave incl
 
 En el panel del proyecto, abrir **SQL Editor**, crear una consulta nueva, pegar el contenido de [`supabase/schema.sql`](supabase/schema.sql) y ejecutarla una vez.
 
-El script crea la tabla `public.choreographies`, habilita Row Level Security y limita todas las operaciones a las filas cuyo `user_id` coincide con la persona autenticada.
+El script crea o actualiza la tabla `public.choreographies`, genera los códigos para compartir, crea el bucket privado `choreography-audio` y aplica las políticas necesarias. Cada persona solo puede editar sus propias coreografías. Una cuenta que copia una coreografía mediante su código recibe una fila independiente y permiso de lectura sobre el MP3 asociado.
 
 ## 2. Configurar el enlace de acceso
 
@@ -24,5 +24,8 @@ En **Authentication → Sign In / Providers**, mantener habilitado el proveedor 
 - Una sesión iniciada recupera la coreografía abierta más recientemente en computadora o celular.
 - Cada cambio se guarda primero en el navegador y luego en Supabase.
 - “Mis coreos” permite crear, abrir, renombrar, duplicar y eliminar rutinas.
+- El botón `#` copia el código de una coreografía y el campo “Copiar una coreo compartida” lo canjea desde otra cuenta.
 - Una rutina local se puede subir con “Guardar la actual en la nube”.
-- Los MP3 siguen siendo locales y no se suben a Supabase.
+- Un MP3 de hasta 50 MB se sube al bucket privado cuando la coreografía está guardada en la nube.
+- Los enlaces de audio son temporales y se regeneran al abrir una coreografía.
+- “Olvidé mi contraseña” envía un enlace al correo y permite elegir una contraseña nueva dentro de la aplicación.

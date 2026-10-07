@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f2eb">
   <meta name="description" content="Diseñá, ordená y animá formaciones coreográficas.">
   <title>Trama — Diseñador coreográfico</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-cloud">
+  <link rel="stylesheet" href="styles.css?v=20261007-sharing-audio">
 </head>
 <body>
   <div class="app-shell">
@@ -75,7 +75,7 @@
         <section class="music-card" aria-label="Música de la coreografía">
           <div class="music-info">
             <span class="music-icon" aria-hidden="true">♪</span>
-            <div><span class="eyebrow">MÚSICA LOCAL</span><strong id="musicFileName">Sumá la canción de la rutina</strong><small id="musicPrivacy">El audio queda en tu dispositivo; al reabrir tendrás que seleccionarlo otra vez.</small></div>
+            <div><span class="eyebrow" id="musicEyebrow">MÚSICA LOCAL</span><strong id="musicFileName">Sumá la canción de la rutina</strong><small id="musicPrivacy">Si la coreografía está en la nube, el MP3 también se sincroniza.</small></div>
           </div>
           <label class="file-button" for="audioInput"><span id="fileButtonText">Elegir MP3</span><input id="audioInput" type="file" accept="audio/mpeg,audio/mp3,.mp3"></label>
           <div class="music-transport">
@@ -164,6 +164,7 @@
             <button class="text-button bordered" id="cloudSignUpBtn" type="button">Crear cuenta</button>
           </div>
         </form>
+        <button class="forgot-password" id="forgotPasswordBtn" type="button">Olvidé mi contraseña</button>
         <p class="cloud-message" id="cloudAuthMessage" aria-live="polite"></p>
       </section>
       <section id="cloudSignedIn" class="cloud-library-view" hidden>
@@ -172,14 +173,28 @@
           <button class="primary-button" id="newCloudRoutineBtn" type="button">＋ Nueva coreo</button>
           <button class="text-button bordered" id="uploadCurrentBtn" type="button">↑ Guardar la actual en la nube</button>
         </div>
+        <form id="shareCodeForm" class="share-code-form">
+          <label for="shareCodeInput">Copiar una coreo compartida</label>
+          <div><input id="shareCodeInput" maxlength="14" autocomplete="off" placeholder="Código de 12 caracteres"><button class="text-button bordered" type="submit">Copiar</button></div>
+          <small>La copia queda en tu cuenta y conserva la canción guardada.</small>
+        </form>
         <div class="cloud-list" id="cloudList" aria-live="polite"></div>
         <p class="cloud-message" id="cloudLibraryMessage" aria-live="polite"></p>
+      </section>
+      <section id="cloudPasswordRecovery" class="cloud-auth-view" hidden>
+        <div class="cloud-intro"><span aria-hidden="true">🔑</span><div><strong>Elegí una contraseña nueva</strong><p>Debe tener al menos ocho caracteres.</p></div></div>
+        <form id="passwordRecoveryForm">
+          <label class="field">Nueva contraseña<input id="recoveryPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="Mínimo 8 caracteres"></label>
+          <label class="field cloud-password-field">Repetir contraseña<input id="recoveryPasswordConfirm" type="password" required minlength="8" autocomplete="new-password" placeholder="Repetila"></label>
+          <button class="primary-button full recovery-submit" type="submit">Guardar nueva contraseña</button>
+        </form>
+        <p class="cloud-message" id="recoveryMessage" aria-live="polite"></p>
       </section>
     </div>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20261007-cloud"></script>
+  <script src="app.js?v=20261007-sharing-audio"></script>
 </body>
 </html>
