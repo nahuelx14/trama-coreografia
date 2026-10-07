@@ -144,6 +144,16 @@ kbd { font-family: inherit; background: white; border: 1px solid var(--line); bo
 .cue-input { width: 54px; border: 1px solid var(--line); border-radius: 5px; padding: 4px 5px; font-size: 9px; font-weight: 800; color: var(--ink); text-align: center; }
 .mark { font-size: 8px; padding: 4px 5px; color: var(--accent-dark); }
 .mark:disabled { color: #aaa; cursor: not-allowed; }
+.project-files { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.project-files h3 { margin: 4px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 17px; }
+.project-files p { margin: 8px 0 12px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.project-files > small { display: block; margin-top: 9px; color: var(--muted); font-size: 8px; line-height: 1.4; }
+.project-file-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.file-action { min-width: 0; border: 1px solid var(--line); border-radius: 7px; background: white; color: var(--navy); cursor: pointer; padding: 8px 6px; text-align: center; font-size: 9px; font-weight: 800; line-height: 1.2; }
+.file-action:hover { border-color: var(--accent); color: var(--accent-dark); }
+.file-action.primary { border-color: var(--navy); background: var(--navy); color: white; }
+.file-action.primary:hover { background: #303b59; }
+.file-action input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .mobile-tabs { display: none; }
 dialog { border: 0; border-radius: 16px; padding: 0; width: min(430px, calc(100% - 28px)); color: var(--ink); box-shadow: 0 30px 90px rgba(20,25,38,.25); }
 dialog::backdrop { background: rgba(23,28,41,.46); backdrop-filter: blur(4px); }
@@ -184,6 +194,8 @@ legend { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; font-
   .dancer-list, .formations-list { max-height: none; overflow: visible; }
   .dancer-row { padding: 12px 9px; }
   .formation-actions { height: 26px; margin-top: 3px; }
+  .project-files { margin-bottom: 20px; }
+  .project-file-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stage-toolbar { align-items: flex-start; }
   .stage-settings { align-items: stretch; flex-direction: column-reverse; gap: 5px; }
   .front-control { justify-content: space-between; padding: 4px 5px 4px 8px; }

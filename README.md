@@ -14,6 +14,8 @@ Aplicación pública: <https://nahuelx14.github.io/trama-coreografia/>
 - Reproducción de un MP3 local y sincronización de formaciones mediante marcas de tiempo editables.
 - Diseño adaptable a computadora y celular.
 - Guardado automático en `localStorage` del navegador.
+- Exportación e importación de un archivo de proyecto `.trama.json` con toda la edición.
+- Exportación CSV de las posiciones y láminas HTML imprimibles de todas las formaciones.
 
 ## Ejecutar localmente
 
@@ -42,4 +44,4 @@ dist/
 
 ## Datos y privacidad
 
-Las rutinas y sus marcas de tiempo se guardan solo en el navegador de la persona usuaria. El archivo MP3 nunca se sube ni se guarda en `localStorage`: debe seleccionarse nuevamente al reabrir la página. No se incluyen datos personales, credenciales ni contenido del navegador en el repositorio. Al borrar los datos del sitio en el navegador, se borra también la rutina guardada.
+La rutina y sus marcas de tiempo se guardan automáticamente en el navegador de la persona usuaria. También se puede descargar un archivo de proyecto para conservar una copia, abrirla en otro dispositivo o recuperarla si se borran los datos del sitio. El archivo MP3 nunca se sube ni se incluye en los archivos exportados: debe seleccionarse nuevamente al reabrir la página. No se incluyen datos personales, credenciales ni contenido del navegador en el repositorio.

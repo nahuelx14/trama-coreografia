@@ -209,8 +209,76 @@
   function tickAudio(){ if(els.audio.paused)return;updateAudioTime();syncFromAudio(els.audio.currentTime);audioFrame=requestAnimationFrame(tickAudio); }
   function escapeHtml(value){ const d=document.createElement('div');d.textContent=value;return d.innerHTML; }
 
+  function fileSlug(value){
+    const normalized=String(value||'trama').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    return normalized.replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,54)||'trama';
+  }
+  function downloadFile(filename,content,type){
+    const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const link=document.createElement('a');
+    link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }
+  function exportProject(){
+    const project={format:'trama-project',version:1,exportedAt:new Date().toISOString(),state:JSON.parse(JSON.stringify(state))};
+    downloadFile(`${fileSlug(state.routineName)}.trama.json`,JSON.stringify(project,null,2),'application/json;charset=utf-8');
+    showToast('Proyecto guardado en Descargas');
+  }
+  function cleanText(value,fallback,max){ const text=String(value??'').trim().slice(0,max);return text||fallback; }
+  function importedProject(value){
+    const source=value?.format==='trama-project'?value.state:value;
+    if(!source||!Array.isArray(source.dancers)||!Array.isArray(source.formations)||!source.formations.length)throw new Error('El archivo no contiene una rutina válida.');
+    if(source.dancers.length>200||source.formations.length>500)throw new Error('El proyecto supera el máximo de 200 bailarines o 500 formaciones.');
+    const usedIds=new Set(); const sourceDancers=source.dancers.filter(d=>d&&typeof d==='object');
+    const dancers=sourceDancers.map((d,i)=>{
+      let id=String(d.id||`d${i+1}`).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,64)||`d${i+1}`;
+      while(usedIds.has(id))id=`${id}-${i+1}`;usedIds.add(id);
+      return {id,name:cleanText(d.name,`Bailarín ${i+1}`,24),color:/^#[0-9a-f]{6}$/i.test(d.color)?d.color:palette[i%palette.length]};
+    });
+    const formations=source.formations.filter(f=>f&&typeof f==='object').map((f,formationIndex)=>{
+      const positions={}; dancers.forEach((d,dancerIndex)=>{
+        const sourceId=String(sourceDancers[dancerIndex]?.id??''); const sourcePositions=f.positions&&typeof f.positions==='object'?f.positions:{};
+        const raw=Object.prototype.hasOwnProperty.call(sourcePositions,sourceId)?sourcePositions[sourceId]:null;
+        positions[d.id]={x:clamp(Number(raw?.x)||50,3,97),y:clamp(Number(raw?.y)||50,5,95)};
+      });
+      const cue=Number(f.cue); return {id:uid(),name:cleanText(f.name,`Formación ${formationIndex+1}`,40),cue:Number.isFinite(cue)?clamp(cue,0,86400):formationIndex*8,positions};
+    });
+    if(!formations.length)throw new Error('El proyecto necesita al menos una formación.');
+    const rows=clamp(Math.round(Number(source.rows)||6),2,12); const cols=clamp(Math.round(Number(source.cols)||9),2,16);
+    return {routineName:cleanText(source.routineName,'Nueva coreografía',60),rows,cols,frontSide:['top','bottom','left','right'].includes(source.frontSide)?source.frontSide:'right',musicName:cleanText(source.musicName,'',120),dancers,formations,activeFormation:clamp(Math.round(Number(source.activeFormation)||0),0,formations.length-1),speed:clamp(Number(source.speed)||950,250,5000)};
+  }
+  async function importProjectFile(event){
+    const input=event.target; const file=input.files?.[0]; if(!file)return;
+    try {
+      if(file.size>5*1024*1024)throw new Error('El archivo es demasiado grande. El máximo es 5 MB.');
+      const next=importedProject(JSON.parse(await file.text()));
+      if(!confirm(`Abrir “${next.routineName}” reemplazará la rutina actual en este dispositivo. ¿Continuar?`))return;
+      stopPlayback(false); if(audioUrl)URL.revokeObjectURL(audioUrl); audioUrl=null;audioReady=false;els.audio.pause();els.audio.removeAttribute('src');els.audio.load();els.audioInput.value='';
+      state=next;saveState();renderAll();showToast('Proyecto abierto y guardado');
+    } catch(error){ showToast(error instanceof Error?error.message:'No pudimos abrir este proyecto.'); }
+    finally { input.value=''; }
+  }
+  function csvCell(value){ return `"${String(value??'').replace(/"/g,'""')}"`; }
+  function exportCsv(){
+    const frontLabels={top:'Arriba',bottom:'Abajo',left:'Izquierda',right:'Derecha'};
+    const rows=[['Rutina','Formación','Orden','Tiempo','Bailarín','Color','X (%)','Y (%)','Frente','Filas','Columnas']];
+    state.formations.forEach((formation,index)=>state.dancers.forEach(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50};rows.push([state.routineName,formation.name,index+1,formatTime(formation.cue),dancer.name,dancer.color,Number(position.x).toFixed(2),Number(position.y).toFixed(2),frontLabels[state.frontSide],state.rows,state.cols]);}));
+    const csv='\ufeff'+rows.map(row=>row.map(csvCell).join(',')).join('\r\n');downloadFile(`${fileSlug(state.routineName)}-posiciones.csv`,csv,'text/csv;charset=utf-8');showToast('CSV guardado en Descargas');
+  }
+  function formationSvg(formation,index){
+    const x=42,y=58,w=816,h=408; const vertical=Array.from({length:state.cols+1},(_,i)=>`<line x1="${x+i*w/state.cols}" y1="${y}" x2="${x+i*w/state.cols}" y2="${y+h}"/>`).join('');
+    const horizontal=Array.from({length:state.rows+1},(_,i)=>`<line x1="${x}" y1="${y+i*h/state.rows}" x2="${x+w}" y2="${y+i*h/state.rows}"/>`).join('');
+    const dots=state.dancers.map(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50};const cx=x+clamp(Number(position.x)||50,3,97)/100*w;const cy=y+clamp(Number(position.y)||50,5,95)/100*h;return `<g><circle cx="${cx}" cy="${cy}" r="16" fill="${dancer.color}" stroke="#fff" stroke-width="3"/><text class="initial" x="${cx}" y="${cy+4}">${escapeHtml(initials(dancer.name))}</text><text class="name" x="${cx}" y="${cy+31}">${escapeHtml(dancer.name)}</text></g>`;}).join('');
+    const frontLabels={top:'↑ ARRIBA',bottom:'↓ ABAJO',left:'← IZQUIERDA',right:'DERECHA →'};
+    return `<article><header><div><span>FORMACIÓN ${String(index+1).padStart(2,'0')}</span><h2>${escapeHtml(formation.name)}</h2></div><strong>${escapeHtml(formatTime(formation.cue))}</strong></header><svg viewBox="0 0 900 520" role="img" aria-label="${escapeHtml(formation.name)}"><rect class="stage-bg" x="${x}" y="${y}" width="${w}" height="${h}"/><g class="grid">${vertical}${horizontal}</g><line class="center" x1="450" y1="${y}" x2="450" y2="${y+h}"/><text class="front" x="450" y="500">FRENTE: ${frontLabels[state.frontSide]}</text>${dots}</svg></article>`;
+  }
+  function exportSheets(){
+    const sheets=state.formations.map(formationSvg).join('');
+    const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(state.routineName)} — Láminas</title><style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{margin:0;background:#eeeae3;color:#202a44;font-family:Arial,sans-serif}main{max-width:1120px;margin:0 auto;padding:24px}.title{margin:0 0 20px}.title small,header span{color:#d94747;font-size:11px;letter-spacing:.16em;font-weight:800}.title h1,header h2{font-family:Georgia,serif;margin:3px 0}article{background:#fffdf9;border:1px solid #d9d5cd;border-radius:14px;padding:18px;margin:0 0 22px;break-after:page;page-break-after:always}article:last-child{break-after:auto;page-break-after:auto}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}header h2{font-size:24px}header strong{background:#202a44;color:white;padding:8px 12px;border-radius:8px}svg{display:block;width:100%;height:auto}.stage-bg{fill:#fffefa;stroke:#202a44;stroke-width:3}.grid line{stroke:#d9d7d1;stroke-width:1}.center{stroke:#202a44;stroke-width:1;stroke-dasharray:6 6;opacity:.35}.initial{fill:#fff;text-anchor:middle;font-size:10px;font-weight:bold}.name{fill:#202a44;text-anchor:middle;font-size:10px;font-weight:bold}.front{fill:#d94747;text-anchor:middle;font-size:11px;font-weight:bold;letter-spacing:2px}@media print{body{background:#fff}main{max-width:none;padding:0}.title{margin-bottom:8mm}article{border:0;padding:0;margin:0}}</style></head><body><main><section class="title"><small>TRAMA · LÁMINAS DE COREOGRAFÍA</small><h1>${escapeHtml(state.routineName)}</h1><p>${state.dancers.length} bailarines · ${state.formations.length} formaciones · Abrí el menú de impresión para guardar este documento como PDF.</p></section>${sheets}</main></body></html>`;
+    downloadFile(`${fileSlug(state.routineName)}-laminas.html`,html,'text/html;charset=utf-8');showToast('Láminas guardadas en Descargas');
+  }
+
   $('addDancerBtn').onclick=$('addDancerSecondary').onclick=()=>openDancerDialog();
   $('duplicateBtn').onclick=$('duplicateTopBtn').onclick=duplicateFormation; $('newFormationBtn').onclick=newFormation;
+  $('exportProjectBtn').onclick=exportProject;$('importProjectInput').onchange=importProjectFile;$('exportCsvBtn').onclick=exportCsv;$('exportSheetsBtn').onclick=exportSheets;
   $('closeDialog').onclick=$('cancelDialog').onclick=()=>els.dialog.close(); els.dancerForm.addEventListener('submit',submitDancer);
   els.customColor.oninput=e=>{selectedColor=e.target.value;renderColors();};
   els.routineName.oninput=e=>{state.routineName=e.target.value;saveState();};
