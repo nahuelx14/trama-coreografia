@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f6f2eb">
+  <meta name="description" content="Diseñá, ordená y animá formaciones coreográficas.">
+  <title>Trama — Diseñador coreográfico</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Trama, inicio">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span><strong>TRAMA</strong><small>ESTUDIO COREOGRÁFICO</small></span>
+      </a>
+      <div class="routine-name-wrap">
+        <label for="routineName">Rutina</label>
+        <input id="routineName" value="Nueva coreografía" maxlength="60" aria-label="Nombre de la rutina">
+      </div>
+      <div class="save-state" id="saveState" aria-live="polite">
+        <span class="save-dot"></span> Guardado en este dispositivo
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="panel people-panel" aria-label="Bailarines">
+        <div class="panel-heading">
+          <div><span class="eyebrow">ELENCO</span><h2>Bailarines <span id="dancerCount">10</span></h2></div>
+          <button class="icon-button filled" id="addDancerBtn" title="Agregar bailarín" aria-label="Agregar bailarín">+</button>
+        </div>
+        <p class="panel-hint">Arrastrá cada punto para ubicarlo en el escenario.</p>
+        <div class="dancer-list" id="dancerList"></div>
+        <button class="text-button full" id="addDancerSecondary"><span>＋</span> Agregar bailarín</button>
+      </aside>
+
+      <section class="stage-workspace">
+        <div class="stage-toolbar">
+          <div>
+            <span class="eyebrow">LIENZO</span>
+            <h1 id="formationTitle">Formación 01</h1>
+          </div>
+          <div class="stage-settings">
+            <label class="front-control" for="frontSide">Frente
+              <select id="frontSide" aria-label="Ubicación del frente del escenario">
+                <option value="top">Arriba</option>
+                <option value="bottom">Abajo</option>
+                <option value="left">Izquierda</option>
+                <option value="right" selected>Derecha</option>
+              </select>
+            </label>
+            <div class="grid-controls" aria-label="Tamaño de cuadrícula">
+              <span>Cuadrícula</span>
+              <label>Filas <input id="rowsInput" type="number" min="2" max="12" value="6"></label>
+              <span class="multiply">×</span>
+              <label>Columnas <input id="colsInput" type="number" min="2" max="16" value="9"></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-frame front-right" id="stageFrame">
+          <div class="stage" id="stage" role="application" aria-label="Escenario. Arrastrá los bailarines para cambiar su posición.">
+            <div class="grid" id="grid" aria-hidden="true"></div>
+            <div class="center-mark" aria-hidden="true"><span></span><i></i></div>
+            <div id="dancerLayer" class="dancer-layer"></div>
+          </div>
+          <div class="stage-front" id="stageFront" aria-label="Frente del escenario"><span>FRENTE DEL ESCENARIO</span><i id="frontArrow">→</i></div>
+        </div>
+        <div class="stage-footnote"><span><kbd>Arrastrá</kbd> para mover</span><span>Las posiciones se guardan automáticamente</span></div>
+
+        <section class="music-card" aria-label="Música de la coreografía">
+          <div class="music-info">
+            <span class="music-icon" aria-hidden="true">♪</span>
+            <div><span class="eyebrow">MÚSICA LOCAL</span><strong id="musicFileName">Sumá la canción de la rutina</strong><small id="musicPrivacy">El audio queda en tu dispositivo; al reabrir tendrás que seleccionarlo otra vez.</small></div>
+          </div>
+          <label class="file-button" for="audioInput"><span id="fileButtonText">Elegir MP3</span><input id="audioInput" type="file" accept="audio/mpeg,audio/mp3,.mp3"></label>
+          <div class="music-transport">
+            <button class="audio-play" id="audioPlayBtn" type="button" disabled aria-label="Reproducir música">▶</button>
+            <span id="audioCurrent">0:00</span>
+            <input id="audioSeek" type="range" min="0" max="100" value="0" step="0.05" disabled aria-label="Posición de la canción">
+            <span id="audioDuration">0:00</span>
+          </div>
+          <audio id="audio" preload="metadata"></audio>
+        </section>
+
+        <section class="playback-card" aria-label="Reproducción">
+          <div class="play-controls">
+            <button class="play-button" id="playBtn" aria-label="Reproducir secuencia"><span id="playIcon">▶</span></button>
+            <div class="play-copy"><strong id="playStatus">Lista para ensayar</strong><small id="playDetail">3 formaciones · ciclo continuo</small></div>
+          </div>
+          <div class="progress-wrap">
+            <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
+            <div class="progress-labels"><span id="progressCurrent">01</span><span id="progressNext">02</span></div>
+          </div>
+          <div class="speed-control">
+            <label for="speedSelect">Velocidad</label>
+            <select id="speedSelect">
+              <option value="1600">Suave</option>
+              <option value="950" selected>Normal</option>
+              <option value="520">Rápida</option>
+            </select>
+          </div>
+        </section>
+      </section>
+
+      <aside class="panel formations-panel" aria-label="Secuencia de formaciones">
+        <div class="panel-heading">
+          <div><span class="eyebrow">SECUENCIA</span><h2>Formaciones <span id="formationCount">3</span></h2></div>
+          <button class="icon-button filled" id="duplicateTopBtn" title="Duplicar formación" aria-label="Duplicar formación">⧉</button>
+        </div>
+        <p class="panel-hint">Ordená los cuadros para construir la rutina.</p>
+        <div class="formations-list" id="formationsList"></div>
+        <button class="primary-button full" id="duplicateBtn"><span>⧉</span> Duplicar formación actual</button>
+        <button class="text-button full" id="newFormationBtn"><span>＋</span> Nueva formación vacía</button>
+      </aside>
+    </main>
+
+    <footer class="mobile-tabs" aria-label="Paneles">
+      <button data-panel="people-panel">● Bailarines</button>
+      <button class="active" data-panel="stage-workspace">▦ Escenario</button>
+      <button data-panel="formations-panel">▤ Secuencia</button>
+    </footer>
+  </div>
+
+  <dialog id="dancerDialog">
+    <form method="dialog" id="dancerForm" class="dialog-card">
+      <div class="dialog-heading"><div><span class="eyebrow">ELENCO</span><h2 id="dialogTitle">Agregar bailarín</h2></div><button type="button" class="close-button" id="closeDialog" aria-label="Cerrar">×</button></div>
+      <label class="field">Nombre<input id="dancerName" required maxlength="24" autocomplete="off" placeholder="Ej. Malena"></label>
+      <fieldset><legend>Color</legend><div class="color-options" id="colorOptions"></div></fieldset>
+      <div class="custom-color-wrap"><label for="customColor">Otro color</label><input id="customColor" type="color" value="#ff5b5b"></div>
+      <div class="dialog-actions"><button type="button" class="text-button" id="cancelDialog">Cancelar</button><button class="primary-button" id="saveDancerBtn" value="default">Guardar bailarín</button></div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>

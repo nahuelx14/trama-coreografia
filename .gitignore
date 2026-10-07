@@ -1,0 +1,17 @@
+# Archivos del sistema y editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Dependencias y resultados temporales
+node_modules/
+*.log
+*.tgz
+.sites/
+
+# Variables y credenciales locales
+.env
+.env.*
+!.env.example
+
