@@ -2,6 +2,8 @@
 
 Primera versión funcional de una herramienta web para diseñar, ordenar y ensayar formaciones coreográficas.
 
+Aplicación pública: <https://nahuelx14.github.io/trama-coreografia/>
+
 ## Funciones
 
 - Escenario con cuadrícula editable y frente configurable arriba, abajo, a la izquierda o a la derecha.
@@ -22,6 +24,10 @@ python -m http.server 4173 --directory dist
 ```
 
 Luego abrí `http://localhost:4173`.
+
+## Publicación
+
+Cada cambio enviado a la rama `main` se publica automáticamente en GitHub Pages mediante el workflow `.github/workflows/pages.yml`. La aplicación pública se sirve directamente desde `dist` y no requiere proceso de compilación.
 
 ## Estructura
 
