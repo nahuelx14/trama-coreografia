@@ -1,6 +1,10 @@
 (() => {
   'use strict';
   const STORAGE_KEY = 'trama-coreografia-v1';
+  const ACTIVE_CLOUD_KEY = 'trama-coreografia-cloud-active-v1';
+  const SUPABASE_URL = 'https://fpjeqyhpmzmzxbuqlhup.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_hnODMTLL-bD0ZDM13HSG_A_4ChWnanP';
+  const cloudClient = window.supabase?.createClient ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY) : null;
   const palette = ['#ff5b5b','#ff9f43','#f4cd3a','#5cc78b','#35a7a0','#4d8fe6','#6c63d9','#a45ed0','#ef6da8','#795548','#1f2937','#9ba2aa'];
   const defaultDancers = [
     ['d1','Malena','#ff5b5b'],['d2','Juli','#ff9f43'],['d3','Cata','#f4cd3a'],['d4','Lola','#5cc78b'],['d5','Paz','#35a7a0'],
@@ -22,6 +26,11 @@
   let audioReady = false;
   let audioUrl = null;
   let audioFrame = null;
+  let cloudSession = null;
+  let cloudItems = [];
+  let activeCloudId = null;
+  let cloudSaveTimer = null;
+  let cloudHydrating = false;
 
   const $ = id => document.getElementById(id);
   const els = {
@@ -31,7 +40,9 @@
     audio:$('audio'), audioInput:$('audioInput'), audioPlay:$('audioPlayBtn'), audioSeek:$('audioSeek'), audioCurrent:$('audioCurrent'), audioDuration:$('audioDuration'), musicFileName:$('musicFileName'), musicPrivacy:$('musicPrivacy'), fileButtonText:$('fileButtonText'),
     routineName:$('routineName'), dialog:$('dancerDialog'), dancerForm:$('dancerForm'), dancerName:$('dancerName'), dialogTitle:$('dialogTitle'),
     colorOptions:$('colorOptions'), customColor:$('customColor'), toast:$('toast'), playBtn:$('playBtn'), playIcon:$('playIcon'),
-    playStatus:$('playStatus'), playDetail:$('playDetail'), progressFill:$('progressFill'), progressCurrent:$('progressCurrent'), progressNext:$('progressNext'), speed:$('speedSelect')
+    playStatus:$('playStatus'), playDetail:$('playDetail'), progressFill:$('progressFill'), progressCurrent:$('progressCurrent'), progressNext:$('progressNext'), speed:$('speedSelect'),
+    saveState:$('saveState'), saveStateText:$('saveStateText'), cloudDialog:$('cloudDialog'), cloudSignedOut:$('cloudSignedOut'), cloudSignedIn:$('cloudSignedIn'),
+    cloudEmail:$('cloudEmail'), cloudPassword:$('cloudPassword'), cloudLoginBtn:$('cloudLoginBtn'), cloudSignUpBtn:$('cloudSignUpBtn'), cloudAuthMessage:$('cloudAuthMessage'), cloudUserEmail:$('cloudUserEmail'), cloudList:$('cloudList'), cloudLibraryMessage:$('cloudLibraryMessage')
   };
 
   function uid(){ return 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -43,6 +54,7 @@
   }
   function saveState(message){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if(cloudSession&&activeCloudId&&!cloudHydrating)scheduleCloudSave();else if(!activeCloudId)setSaveStatus('Guardado en este dispositivo');
     if(message) showToast(message);
   }
   function showToast(message){ els.toast.textContent = message; els.toast.classList.add('show'); clearTimeout(showToast.timer); showToast.timer = setTimeout(()=>els.toast.classList.remove('show'),1900); }
@@ -209,6 +221,139 @@
   function tickAudio(){ if(els.audio.paused)return;updateAudioTime();syncFromAudio(els.audio.currentTime);audioFrame=requestAnimationFrame(tickAudio); }
   function escapeHtml(value){ const d=document.createElement('div');d.textContent=value;return d.innerHTML; }
 
+  function setSaveStatus(text,type=''){
+    els.saveStateText.textContent=text;els.saveState.classList.toggle('pending',type==='pending');els.saveState.classList.toggle('error',type==='error');
+  }
+  function cloudErrorMessage(error,fallback='No pudimos conectarnos con la nube.'){
+    const code=String(error?.code||''); const message=String(error?.message||'').toLowerCase();
+    if(code==='42P01'||message.includes('choreographies'))return 'Falta crear la tabla de coreografías en Supabase.';
+    if(message.includes('rate limit'))return 'Se hicieron demasiados intentos. Esperá unos minutos y volvé a probar.';
+    if(message.includes('invalid login'))return 'El correo o la contraseña no son correctos.';
+    if(message.includes('email not confirmed'))return 'Primero confirmá tu correo desde el mensaje que te enviamos.';
+    if(message.includes('already registered')||message.includes('already exists'))return 'Ya existe una cuenta con ese correo. Probá ingresar.';
+    if(message.includes('password')&&message.includes('least'))return 'La contraseña debe tener al menos ocho caracteres.';
+    if(message.includes('email'))return 'Revisá el correo ingresado e intentá nuevamente.';
+    return fallback;
+  }
+  function cloudPayload(){ return JSON.parse(JSON.stringify(state)); }
+  function scheduleCloudSave(){
+    clearTimeout(cloudSaveTimer);setSaveStatus('Guardando en la nube…','pending');cloudSaveTimer=setTimeout(persistCloud,750);
+  }
+  async function persistCloud(){
+    if(!cloudClient||!cloudSession||!activeCloudId)return;
+    const id=activeCloudId; const updatedAt=new Date().toISOString();
+    const {error}=await cloudClient.from('choreographies').update({name:cleanText(state.routineName,'Sin título',60),data:cloudPayload(),updated_at:updatedAt}).eq('id',id).eq('user_id',cloudSession.user.id);
+    if(error){setSaveStatus('Error al guardar en la nube','error');els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos guardar los últimos cambios.');els.cloudLibraryMessage.classList.add('error');return;}
+    const item=cloudItems.find(entry=>entry.id===id);if(item){item.name=state.routineName;item.updated_at=updatedAt;}
+    setSaveStatus('Guardado en la nube');if(els.cloudDialog.open)renderCloudList();
+  }
+  function renderCloudViews(){
+    const signedIn=Boolean(cloudSession);els.cloudSignedOut.hidden=signedIn;els.cloudSignedIn.hidden=!signedIn;
+    if(signedIn)els.cloudUserEmail.textContent=cloudSession.user.email||'Sesión iniciada';
+  }
+  function formatCloudDate(value){
+    try{return new Intl.DateTimeFormat('es-AR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(value));}catch{return 'Guardada';}
+  }
+  function renderCloudList(){
+    els.cloudList.innerHTML='';
+    if(!cloudItems.length){const empty=document.createElement('div');empty.className='cloud-empty';empty.textContent='Todavía no guardaste coreografías en la nube.';els.cloudList.appendChild(empty);return;}
+    cloudItems.forEach(item=>{
+      const row=document.createElement('article');row.className='cloud-routine'+(item.id===activeCloudId?' active':'');
+      const open=document.createElement('button');open.type='button';open.className='cloud-open';open.innerHTML=`<strong>${escapeHtml(item.name||'Sin título')}</strong><small>${item.id===activeCloudId?'Abierta ahora · ':''}Actualizada ${escapeHtml(formatCloudDate(item.updated_at))}</small>`;open.onclick=()=>openCloudRoutine(item.id,true);
+      const actions=document.createElement('div');actions.className='cloud-item-actions';
+      const rename=document.createElement('button');rename.type='button';rename.title='Renombrar';rename.setAttribute('aria-label',`Renombrar ${item.name}`);rename.textContent='✎';rename.onclick=()=>renameCloudRoutine(item.id);
+      const duplicate=document.createElement('button');duplicate.type='button';duplicate.title='Duplicar';duplicate.setAttribute('aria-label',`Duplicar ${item.name}`);duplicate.textContent='⧉';duplicate.onclick=()=>duplicateCloudRoutine(item.id);
+      const remove=document.createElement('button');remove.type='button';remove.className='delete';remove.title='Eliminar';remove.setAttribute('aria-label',`Eliminar ${item.name}`);remove.textContent='×';remove.onclick=()=>deleteCloudRoutine(item.id);
+      actions.append(rename,duplicate,remove);row.append(open,actions);els.cloudList.appendChild(row);
+    });
+  }
+  async function refreshCloudList(){
+    if(!cloudClient||!cloudSession)return false;
+    els.cloudLibraryMessage.textContent='Cargando coreografías…';els.cloudLibraryMessage.classList.remove('error');
+    const {data,error}=await cloudClient.from('choreographies').select('id,name,created_at,updated_at').order('updated_at',{ascending:false});
+    if(error){cloudItems=[];renderCloudList();els.cloudLibraryMessage.textContent=cloudErrorMessage(error);els.cloudLibraryMessage.classList.add('error');return false;}
+    cloudItems=data||[];renderCloudList();els.cloudLibraryMessage.textContent=cloudItems.length?`${cloudItems.length} ${cloudItems.length===1?'coreografía guardada':'coreografías guardadas'}`:'';return true;
+  }
+  async function openCloudRoutine(id,closeDialog){
+    if(!cloudClient||!cloudSession)return;
+    els.cloudLibraryMessage.textContent='Abriendo coreografía…';els.cloudLibraryMessage.classList.remove('error');
+    const {data,error}=await cloudClient.from('choreographies').select('id,name,data,updated_at').eq('id',id).single();
+    if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos abrir esta coreografía.');els.cloudLibraryMessage.classList.add('error');return;}
+    try{
+      cloudHydrating=true;state=importedProject(data.data);state.routineName=cleanText(data.name,state.routineName,60);activeCloudId=data.id;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll();setSaveStatus('Guardado en la nube');
+      await refreshCloudList();if(closeDialog)els.cloudDialog.close();showToast(`Abriste “${state.routineName}”`);
+    }catch{els.cloudLibraryMessage.textContent='Esta coreografía tiene datos que no pudimos leer.';els.cloudLibraryMessage.classList.add('error');}
+    finally{cloudHydrating=false;}
+  }
+  function nextCloudName(){
+    let number=1;const names=new Set(cloudItems.map(item=>String(item.name).toLowerCase()));while(names.has(`coreo ${number}`))number++;return `Coreo ${number}`;
+  }
+  async function createCloudRoutine(){
+    if(!cloudClient||!cloudSession)return;
+    const draft=freshState();draft.routineName=nextCloudName();els.cloudLibraryMessage.textContent='Creando coreografía…';
+    const {data,error}=await cloudClient.from('choreographies').insert({user_id:cloudSession.user.id,name:draft.routineName,data:draft}).select('id,name,created_at,updated_at').single();
+    if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos crear la coreografía.');els.cloudLibraryMessage.classList.add('error');return;}
+    cloudHydrating=true;state=draft;activeCloudId=data.id;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll();cloudHydrating=false;await refreshCloudList();setSaveStatus('Guardado en la nube');els.cloudDialog.close();showToast(`${draft.routineName} creada`);
+  }
+  async function uploadCurrentRoutine(){
+    if(!cloudClient||!cloudSession)return;
+    const name=state.routineName==='Nueva coreografía'?nextCloudName():cleanText(state.routineName,nextCloudName(),60);state.routineName=name;
+    els.cloudLibraryMessage.textContent='Guardando la rutina actual…';els.cloudLibraryMessage.classList.remove('error');
+    const {data,error}=await cloudClient.from('choreographies').insert({user_id:cloudSession.user.id,name,data:cloudPayload()}).select('id,name,created_at,updated_at').single();
+    if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos guardar esta rutina.');els.cloudLibraryMessage.classList.add('error');return;}
+    activeCloudId=data.id;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));await refreshCloudList();setSaveStatus('Guardado en la nube');els.cloudDialog.close();showToast('Rutina guardada en la nube');
+  }
+  async function renameCloudRoutine(id){
+    const item=cloudItems.find(entry=>entry.id===id);if(!item)return;const name=prompt('Nuevo nombre:',item.name);if(!name?.trim())return;const safeName=cleanText(name,item.name,60);
+    const {error}=await cloudClient.from('choreographies').update({name:safeName,updated_at:new Date().toISOString()}).eq('id',id);
+    if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos cambiar el nombre.');els.cloudLibraryMessage.classList.add('error');return;}
+    if(id===activeCloudId){state.routineName=safeName;localStorage.setItem(STORAGE_KEY,JSON.stringify(state));els.routineName.value=safeName;}
+    await refreshCloudList();showToast('Coreografía renombrada');
+  }
+  async function duplicateCloudRoutine(id){
+    const {data:source,error:readError}=await cloudClient.from('choreographies').select('name,data').eq('id',id).single();
+    if(readError){els.cloudLibraryMessage.textContent='No pudimos duplicar esta coreografía.';return;}
+    const copy=importedProject(source.data);copy.routineName=cleanText(`${source.name} copia`,'Copia',60);
+    const {data,error}=await cloudClient.from('choreographies').insert({user_id:cloudSession.user.id,name:copy.routineName,data:copy}).select('id').single();
+    if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos duplicar esta coreografía.');els.cloudLibraryMessage.classList.add('error');return;}
+    await refreshCloudList();await openCloudRoutine(data.id,true);showToast('Coreografía duplicada');
+  }
+  async function deleteCloudRoutine(id){
+    const item=cloudItems.find(entry=>entry.id===id);if(!item||!confirm(`¿Eliminar “${item.name}” de la nube? Esta acción no se puede deshacer.`))return;
+    const {error}=await cloudClient.from('choreographies').delete().eq('id',id);
+    if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos eliminar esta coreografía.');els.cloudLibraryMessage.classList.add('error');return;}
+    if(id===activeCloudId){activeCloudId=null;localStorage.removeItem(ACTIVE_CLOUD_KEY);setSaveStatus('Guardado en este dispositivo');}
+    await refreshCloudList();showToast('Coreografía eliminada');
+  }
+  async function handleCloudLogin(event){
+    event.preventDefault();if(!cloudClient)return;const email=els.cloudEmail.value.trim();const password=els.cloudPassword.value;if(!email||password.length<8){els.cloudAuthMessage.textContent='Ingresá un correo válido y una contraseña de al menos ocho caracteres.';els.cloudAuthMessage.classList.add('error');return;}
+    els.cloudLoginBtn.disabled=true;els.cloudSignUpBtn.disabled=true;els.cloudAuthMessage.textContent='Ingresando…';els.cloudAuthMessage.classList.remove('error');
+    const {error}=await cloudClient.auth.signInWithPassword({email,password});els.cloudLoginBtn.disabled=false;els.cloudSignUpBtn.disabled=false;
+    if(error){els.cloudAuthMessage.textContent=cloudErrorMessage(error,'No pudimos iniciar sesión.');els.cloudAuthMessage.classList.add('error');return;}
+    els.cloudPassword.value='';els.cloudAuthMessage.textContent='Sesión iniciada.';
+  }
+  async function handleCloudSignUp(){
+    if(!cloudClient)return;const email=els.cloudEmail.value.trim();const password=els.cloudPassword.value;
+    if(!email||password.length<8){els.cloudAuthMessage.textContent='Ingresá un correo válido y una contraseña de al menos ocho caracteres.';els.cloudAuthMessage.classList.add('error');return;}
+    els.cloudLoginBtn.disabled=true;els.cloudSignUpBtn.disabled=true;els.cloudAuthMessage.textContent='Creando cuenta…';els.cloudAuthMessage.classList.remove('error');
+    const redirectTo=`${location.origin}${location.pathname}`;const {data,error}=await cloudClient.auth.signUp({email,password,options:{emailRedirectTo:redirectTo}});els.cloudLoginBtn.disabled=false;els.cloudSignUpBtn.disabled=false;
+    if(error){els.cloudAuthMessage.textContent=cloudErrorMessage(error,'No pudimos crear la cuenta.');els.cloudAuthMessage.classList.add('error');return;}
+    els.cloudPassword.value='';els.cloudAuthMessage.textContent=data.session?'Cuenta creada. Ya podés guardar tus coreografías.':'Cuenta creada. Revisá tu correo para confirmarla y después ingresá.';
+  }
+  async function applyCloudSession(session,loadInitial){
+    cloudSession=session;renderCloudViews();
+    if(!session){activeCloudId=null;cloudItems=[];localStorage.removeItem(ACTIVE_CLOUD_KEY);renderCloudList();setSaveStatus('Guardado en este dispositivo');return;}
+    const loaded=await refreshCloudList();if(!loaded)return;
+    const storedId=localStorage.getItem(ACTIVE_CLOUD_KEY);const first=cloudItems.find(item=>item.id===storedId)||cloudItems[0];
+    if(loadInitial&&first)await openCloudRoutine(first.id,false);else if(activeCloudId)setSaveStatus('Guardado en la nube');
+  }
+  async function initCloud(){
+    if(!cloudClient){setSaveStatus('Nube no disponible','error');return;}
+    const {data,error}=await cloudClient.auth.getSession();if(error){setSaveStatus('Nube no disponible','error');return;}
+    await applyCloudSession(data.session,true);
+    cloudClient.auth.onAuthStateChange((event,session)=>{if(event==='INITIAL_SESSION')return;setTimeout(()=>applyCloudSession(session,event==='SIGNED_IN'),0);});
+  }
+
   function fileSlug(value){
     const normalized=String(value||'trama').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     return normalized.replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,54)||'trama';
@@ -252,7 +397,7 @@
       const next=importedProject(JSON.parse(await file.text()));
       if(!confirm(`Abrir “${next.routineName}” reemplazará la rutina actual en este dispositivo. ¿Continuar?`))return;
       stopPlayback(false); if(audioUrl)URL.revokeObjectURL(audioUrl); audioUrl=null;audioReady=false;els.audio.pause();els.audio.removeAttribute('src');els.audio.load();els.audioInput.value='';
-      state=next;saveState();renderAll();showToast('Proyecto abierto y guardado');
+      activeCloudId=null;localStorage.removeItem(ACTIVE_CLOUD_KEY);state=next;saveState();renderAll();showToast('Proyecto abierto y guardado');
     } catch(error){ showToast(error instanceof Error?error.message:'No pudimos abrir este proyecto.'); }
     finally { input.value=''; }
   }
@@ -279,6 +424,11 @@
   $('addDancerBtn').onclick=$('addDancerSecondary').onclick=()=>openDancerDialog();
   $('duplicateBtn').onclick=$('duplicateTopBtn').onclick=duplicateFormation; $('newFormationBtn').onclick=newFormation;
   $('exportProjectBtn').onclick=exportProject;$('importProjectInput').onchange=importProjectFile;$('exportCsvBtn').onclick=exportCsv;$('exportSheetsBtn').onclick=exportSheets;
+  $('cloudLibraryBtn').onclick=()=>{renderCloudViews();renderCloudList();els.cloudDialog.showModal();if(cloudSession)refreshCloudList();};
+  $('closeCloudDialog').onclick=()=>els.cloudDialog.close();$('cloudLoginForm').onsubmit=handleCloudLogin;
+  $('cloudSignUpBtn').onclick=handleCloudSignUp;
+  $('cloudSignOutBtn').onclick=async()=>{if(cloudClient)await cloudClient.auth.signOut();els.cloudDialog.close();showToast('Sesión cerrada');};
+  $('newCloudRoutineBtn').onclick=createCloudRoutine;$('uploadCurrentBtn').onclick=uploadCurrentRoutine;
   $('closeDialog').onclick=$('cancelDialog').onclick=()=>els.dialog.close(); els.dancerForm.addEventListener('submit',submitDancer);
   els.customColor.oninput=e=>{selectedColor=e.target.value;renderColors();};
   els.routineName.oninput=e=>{state.routineName=e.target.value;saveState();};
@@ -294,4 +444,5 @@
   document.querySelector('.stage-workspace').classList.add('mobile-active');
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&playback.playing)pausePlayback();});
   renderAll();
+  initCloud();
 })();

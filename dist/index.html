@@ -19,8 +19,11 @@
         <label for="routineName">Rutina</label>
         <input id="routineName" value="Nueva coreografía" maxlength="60" aria-label="Nombre de la rutina">
       </div>
-      <div class="save-state" id="saveState" aria-live="polite">
-        <span class="save-dot"></span> Guardado en este dispositivo
+      <div class="header-actions">
+        <div class="save-state" id="saveState" aria-live="polite">
+          <span class="save-dot"></span><span id="saveStateText">Guardado en este dispositivo</span>
+        </div>
+        <button class="cloud-library-button" id="cloudLibraryBtn" type="button"><span aria-hidden="true">☁</span><span id="cloudButtonLabel">Mis coreos</span></button>
       </div>
     </header>
 
@@ -145,7 +148,38 @@
     </form>
   </dialog>
 
+  <dialog id="cloudDialog" class="cloud-dialog">
+    <div class="dialog-card cloud-card">
+      <div class="dialog-heading">
+        <div><span class="eyebrow">NUBE</span><h2>Mis coreografías</h2></div>
+        <button type="button" class="close-button" id="closeCloudDialog" aria-label="Cerrar">×</button>
+      </div>
+      <section id="cloudSignedOut" class="cloud-auth-view">
+        <div class="cloud-intro"><span aria-hidden="true">☁</span><div><strong>Tus coreos, siempre disponibles</strong><p>Creá tu cuenta o ingresá para continuar desde cualquier dispositivo.</p></div></div>
+        <form id="cloudLoginForm">
+          <label class="field">Correo electrónico<input id="cloudEmail" type="email" required autocomplete="email" placeholder="tu@email.com"></label>
+          <label class="field cloud-password-field">Contraseña<input id="cloudPassword" type="password" required minlength="8" autocomplete="current-password" placeholder="Mínimo 8 caracteres"></label>
+          <div class="cloud-login-actions">
+            <button class="primary-button" id="cloudLoginBtn" type="submit">Ingresar</button>
+            <button class="text-button bordered" id="cloudSignUpBtn" type="button">Crear cuenta</button>
+          </div>
+        </form>
+        <p class="cloud-message" id="cloudAuthMessage" aria-live="polite"></p>
+      </section>
+      <section id="cloudSignedIn" class="cloud-library-view" hidden>
+        <div class="cloud-account-row"><span id="cloudUserEmail"></span><button class="text-button" id="cloudSignOutBtn" type="button">Cerrar sesión</button></div>
+        <div class="cloud-library-actions">
+          <button class="primary-button" id="newCloudRoutineBtn" type="button">＋ Nueva coreo</button>
+          <button class="text-button bordered" id="uploadCurrentBtn" type="button">↑ Guardar la actual en la nube</button>
+        </div>
+        <div class="cloud-list" id="cloudList" aria-live="polite"></div>
+        <p class="cloud-message" id="cloudLibraryMessage" aria-live="polite"></p>
+      </section>
+    </div>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
 </body>
 </html>

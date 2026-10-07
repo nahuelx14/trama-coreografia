@@ -16,6 +16,9 @@ Aplicación pública: <https://nahuelx14.github.io/trama-coreografia/>
 - Guardado automático en `localStorage` del navegador.
 - Exportación e importación de un archivo de proyecto `.trama.json` con toda la edición.
 - Exportación CSV de las posiciones y láminas HTML imprimibles de todas las formaciones.
+- Biblioteca de múltiples coreografías sincronizadas con Supabase.
+- Registro e inicio de sesión mediante correo y contraseña.
+- Creación, apertura, renombrado, duplicado y eliminación de coreografías guardadas en la nube.
 
 ## Ejecutar localmente
 
@@ -40,8 +43,10 @@ dist/
   app.js        Estado, interacción, animación y persistencia
 .openai/
   hosting.json  Configuración de publicación en Sites
+supabase/
+  schema.sql    Tabla y políticas de seguridad de Supabase
 ```
 
 ## Datos y privacidad
 
-La rutina y sus marcas de tiempo se guardan automáticamente en el navegador de la persona usuaria. También se puede descargar un archivo de proyecto para conservar una copia, abrirla en otro dispositivo o recuperarla si se borran los datos del sitio. El archivo MP3 nunca se sube ni se incluye en los archivos exportados: debe seleccionarse nuevamente al reabrir la página. No se incluyen datos personales, credenciales ni contenido del navegador en el repositorio.
+La rutina y sus marcas de tiempo se guardan automáticamente en el navegador. Al iniciar sesión, las coreografías también se sincronizan con Supabase y quedan asociadas al usuario mediante políticas Row Level Security. También se puede descargar un archivo de proyecto para conservar una copia. El archivo MP3 nunca se sube ni se incluye en los archivos exportados: debe seleccionarse nuevamente al reabrir la página. La configuración necesaria de Supabase está documentada en [`SUPABASE.md`](SUPABASE.md).
