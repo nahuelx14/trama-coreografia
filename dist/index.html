@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f2eb">
   <meta name="description" content="Diseñá, ordená y animá formaciones coreográficas.">
   <title>Trama — Diseñador coreográfico</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-sharing-audio">
+  <link rel="stylesheet" href="styles.css?v=20261012-stage2-paths">
 </head>
 <body>
   <div class="app-shell">
@@ -41,7 +41,7 @@
       <section class="stage-workspace">
         <div class="stage-toolbar">
           <div>
-            <span class="eyebrow">LIENZO</span>
+            <span class="eyebrow">LIENZO</span><span class="lab-badge">ETAPA 2 · PRUEBA</span>
             <h1 id="formationTitle">Formación 01</h1>
           </div>
           <div class="stage-settings">
@@ -66,11 +66,29 @@
           <div class="stage" id="stage" role="application" aria-label="Escenario. Arrastrá los bailarines para cambiar su posición.">
             <div class="grid" id="grid" aria-hidden="true"></div>
             <div class="center-mark" aria-hidden="true"><span></span><i></i></div>
+            <svg id="trajectoryLayer" class="trajectory-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
             <div id="dancerLayer" class="dancer-layer"></div>
+            <div id="trajectoryHandleLayer" class="trajectory-handle-layer"></div>
           </div>
           <div class="stage-front" id="stageFront" aria-label="Frente del escenario"><span>FRENTE DEL ESCENARIO</span><i id="frontArrow">→</i></div>
         </div>
         <div class="stage-footnote"><span><kbd>Arrastrá</kbd> para mover</span><span>Las posiciones se guardan automáticamente</span></div>
+
+        <section class="trajectory-card" id="trajectoryCard" aria-label="Trayectoria entre formaciones">
+          <div class="trajectory-copy">
+            <span class="eyebrow">TRAYECTORIA</span>
+            <strong id="trajectoryTitle">Entrada → Diagonal</strong>
+            <small id="trajectoryHint">Elegí un bailarín y editá el camino que recorre.</small>
+          </div>
+          <label class="trajectory-dancer">Bailarín
+            <select id="trajectoryDancer" aria-label="Bailarín para editar la trayectoria"></select>
+          </label>
+          <div class="trajectory-actions">
+            <button class="trajectory-edit" id="trajectoryEditBtn" type="button">Editar recorrido</button>
+            <button class="trajectory-reset" id="trajectoryResetBtn" type="button" disabled>↗ Recta</button>
+            <button class="trajectory-preview" id="trajectoryPreviewBtn" type="button">▶ Probar</button>
+          </div>
+        </section>
 
         <section class="music-card" aria-label="Música de la coreografía">
           <div class="music-info">
@@ -195,6 +213,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20261007-sharing-audio"></script>
+  <script src="app.js?v=20261012-stage2-paths"></script>
 </body>
 </html>
