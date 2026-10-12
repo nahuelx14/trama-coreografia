@@ -2,6 +2,8 @@
   'use strict';
   const STORAGE_KEY = 'trama-coreografia-v1';
   const ACTIVE_CLOUD_KEY = 'trama-coreografia-cloud-active-v1';
+  const HISTORY_KEY = 'trama-coreografia-history-v1';
+  const HISTORY_LIMIT = 40;
   const SUPABASE_URL = 'https://fpjeqyhpmzmzxbuqlhup.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_hnODMTLL-bD0ZDM13HSG_A_4ChWnanP';
   const AUDIO_BUCKET = 'choreography-audio';
@@ -38,6 +40,9 @@
   let passwordRecoveryMode = false;
   let trajectoryEditing = false;
   let selectedTrajectoryDancerId = null;
+  let historyEntries = [];
+  let historyIndex = -1;
+  let routineNameHistoryTimer = null;
 
   const $ = id => document.getElementById(id);
   const els = {
@@ -51,7 +56,8 @@
     saveState:$('saveState'), saveStateText:$('saveStateText'), cloudDialog:$('cloudDialog'), cloudSignedOut:$('cloudSignedOut'), cloudSignedIn:$('cloudSignedIn'),
     cloudEmail:$('cloudEmail'), cloudPassword:$('cloudPassword'), cloudLoginBtn:$('cloudLoginBtn'), cloudSignUpBtn:$('cloudSignUpBtn'), cloudAuthMessage:$('cloudAuthMessage'), cloudUserEmail:$('cloudUserEmail'), cloudList:$('cloudList'), cloudLibraryMessage:$('cloudLibraryMessage'),
     cloudPasswordRecovery:$('cloudPasswordRecovery'), recoveryPassword:$('recoveryPassword'), recoveryPasswordConfirm:$('recoveryPasswordConfirm'), recoveryMessage:$('recoveryMessage'), shareCodeInput:$('shareCodeInput'),
-    trajectoryTitle:$('trajectoryTitle'), trajectoryHint:$('trajectoryHint'), trajectoryDancer:$('trajectoryDancer'), trajectoryEditBtn:$('trajectoryEditBtn'), trajectoryResetBtn:$('trajectoryResetBtn'), trajectoryPreviewBtn:$('trajectoryPreviewBtn')
+    trajectoryTitle:$('trajectoryTitle'), trajectoryHint:$('trajectoryHint'), trajectoryDancer:$('trajectoryDancer'), trajectoryEditBtn:$('trajectoryEditBtn'), trajectoryResetBtn:$('trajectoryResetBtn'), trajectoryPreviewBtn:$('trajectoryPreviewBtn'),
+    undoBtn:$('undoBtn'), redoBtn:$('redoBtn'), historyBtn:$('historyBtn'), historyDrawer:$('historyDrawer'), historyBackdrop:$('historyBackdrop'), historyList:$('historyList'), historyStatus:$('historyStatus')
   };
 
   function uid(){ return 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -61,8 +67,61 @@
     try { const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)); if (saved?.formations?.length && saved?.dancers) return saved; } catch(e) {}
     return freshState();
   }
-  function saveState(message){
+  function stateSnapshot(){ return JSON.parse(JSON.stringify(state)); }
+  function historyFingerprint(value){ const copy=JSON.parse(JSON.stringify(value));delete copy.activeFormation;return JSON.stringify(copy); }
+  function persistHistory(){
+    try { localStorage.setItem(HISTORY_KEY,JSON.stringify({version:1,index:historyIndex,entries:historyEntries})); }
+    catch(error){
+      const offset=Math.max(0,historyEntries.length-10);historyEntries=historyEntries.slice(offset);historyIndex=clamp(historyIndex-offset,0,Math.max(0,historyEntries.length-1));
+      try { localStorage.setItem(HISTORY_KEY,JSON.stringify({version:1,index:historyIndex,entries:historyEntries})); } catch(ignored) {}
+    }
+  }
+  function resetHistory(label='Punto de partida'){
+    historyEntries=[{id:uid(),label,time:Date.now(),state:stateSnapshot()}];historyIndex=0;persistHistory();renderHistory();
+  }
+  function initializeHistory(){
+    try {
+      const saved=JSON.parse(localStorage.getItem(HISTORY_KEY));const entries=Array.isArray(saved?.entries)?saved.entries:[];const index=clamp(Math.round(Number(saved?.index)||0),0,Math.max(0,entries.length-1));
+      if(entries.length&&entries[index]?.state&&historyFingerprint(entries[index].state)===historyFingerprint(state)){const offset=Math.max(0,entries.length-HISTORY_LIMIT);historyEntries=entries.slice(offset);historyIndex=clamp(index-offset,0,historyEntries.length-1);renderHistory();return;}
+    } catch(error) {}
+    resetHistory();
+  }
+  function commitHistory(label='Cambio realizado'){
+    const snapshot=stateSnapshot(),current=historyEntries[historyIndex];
+    if(current&&historyFingerprint(current.state)===historyFingerprint(snapshot)){current.state=snapshot;persistHistory();renderHistory();return;}
+    if(historyIndex<historyEntries.length-1)historyEntries=historyEntries.slice(0,historyIndex+1);
+    historyEntries.push({id:uid(),label,time:Date.now(),state:snapshot});
+    if(historyEntries.length>HISTORY_LIMIT)historyEntries.shift();
+    historyIndex=historyEntries.length-1;persistHistory();renderHistory();
+  }
+  function formatHistoryTime(value){ return new Intl.DateTimeFormat('es-AR',{hour:'2-digit',minute:'2-digit'}).format(new Date(value)); }
+  function renderHistory(){
+    if(!els.historyList)return;
+    els.undoBtn.disabled=historyIndex<=0;els.redoBtn.disabled=historyIndex<0||historyIndex>=historyEntries.length-1;
+    els.historyStatus.textContent=`${historyEntries.length} ${historyEntries.length===1?'punto guardado':'puntos guardados'}`;els.historyList.innerHTML='';
+    historyEntries.forEach((entry,index)=>{
+      const button=document.createElement('button');button.type='button';button.className=`history-entry${index===historyIndex?' current':''}`;button.disabled=index===historyIndex;
+      button.setAttribute('aria-label',index===historyIndex?`${entry.label}, estado actual`:`Volver a ${entry.label}`);
+      button.innerHTML=`<span class="history-entry-number">${String(index+1).padStart(2,'0')}</span><span class="history-entry-copy"><strong>${escapeHtml(entry.label)}</strong><small>${escapeHtml(formatHistoryTime(entry.time))}</small></span>${index===historyIndex?'<span class="history-entry-badge">AHORA</span>':'<span aria-hidden="true">›</span>'}`;
+      button.onclick=()=>restoreHistory(index);els.historyList.prepend(button);
+    });
+  }
+  function restoreHistory(index,message){
+    if(index<0||index>=historyEntries.length||index===historyIndex)return;
+    if(playback.playing)stopPlayback(false);if(audioReady&&!els.audio.paused)els.audio.pause();const active=state.activeFormation;
+    state=importedProject(historyEntries[index].state);state.activeFormation=clamp(active,0,state.formations.length-1);historyIndex=index;
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(state));persistHistory();if(cloudSession&&activeCloudId&&!cloudHydrating)scheduleCloudSave();else if(!activeCloudId)setSaveStatus('Guardado en este dispositivo');
+    renderAll();showToast(message||`Volviste a “${historyEntries[index].label}”`);
+  }
+  function undoHistory(){ if(historyIndex>0)restoreHistory(historyIndex-1,'Último cambio deshecho'); }
+  function redoHistory(){ if(historyIndex<historyEntries.length-1)restoreHistory(historyIndex+1,'Cambio rehecho'); }
+  function setHistoryOpen(open){
+    els.historyDrawer.classList.toggle('open',open);els.historyBackdrop.classList.toggle('open',open);els.historyDrawer.setAttribute('aria-hidden',String(!open));els.historyBtn.setAttribute('aria-expanded',String(open));
+    if(open)setTimeout(()=>els.historyDrawer.querySelector('.history-entry.current')?.scrollIntoView({block:'center'}),30);
+  }
+  function saveState(message,historyLabel=message||'Cambio realizado',recordHistory=true){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if(recordHistory)commitHistory(historyLabel);
     if(cloudSession&&activeCloudId&&!cloudHydrating)scheduleCloudSave();else if(!activeCloudId)setSaveStatus('Guardado en este dispositivo');
     if(message) showToast(message);
   }
@@ -97,7 +156,7 @@
     els.routineName.value = state.routineName;
     state.frontSide = ['top','bottom','left','right'].includes(state.frontSide) ? state.frontSide : 'right';
     els.rows.value = state.rows; els.cols.value = state.cols; els.speed.value = String(state.speed || 950); els.frontSide.value = state.frontSide;
-    renderGrid(); renderFront(); renderDancers(); renderDancerList(); renderFormations(); renderTrajectoryEditor(); renderMusicStatus(); updatePlaybackLabels();
+    renderGrid(); renderFront(); renderDancers(); renderDancerList(); renderFormations(); renderTrajectoryEditor(); renderMusicStatus(); updatePlaybackLabels(); renderHistory();
   }
   function renderGrid(){ els.grid.style.backgroundSize = `calc(100% / ${state.cols}) calc(100% / ${state.rows})`; }
   function renderFront(){
@@ -186,13 +245,13 @@
       const rect=els.stage.getBoundingClientRect(); const x=clamp((e.clientX-rect.left)/rect.width*100,3,97); const y=clamp((e.clientY-rect.top)/rect.height*100,5,95);
       node.style.setProperty('--x',x); node.style.setProperty('--y',y); currentFormation().positions[node.dataset.id]={x,y};
     };
-    const up = () => { node.classList.remove('dragging'); node.removeEventListener('pointermove',move); node.removeEventListener('pointerup',up); node.removeEventListener('pointercancel',up); saveState(); renderFormations(); };
+    const up = () => { const dancer=state.dancers.find(item=>item.id===node.dataset.id);node.classList.remove('dragging'); node.removeEventListener('pointermove',move); node.removeEventListener('pointerup',up); node.removeEventListener('pointercancel',up); saveState(null,`Movimiento de ${dancer?.name||'bailarín'}`); renderFormations(); };
     node.addEventListener('pointermove',move); node.addEventListener('pointerup',up); node.addEventListener('pointercancel',up);
   }
   function keyboardMove(event){
     const vectors={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}; if(!vectors[event.key]) return;
     event.preventDefault(); const step=event.shiftKey?5:1; const p=currentFormation().positions[event.currentTarget.dataset.id];
-    p.x=clamp(p.x+vectors[event.key][0]*step,3,97); p.y=clamp(p.y+vectors[event.key][1]*step,5,95); saveState(); renderDancers(); renderFormations();
+    p.x=clamp(p.x+vectors[event.key][0]*step,3,97); p.y=clamp(p.y+vectors[event.key][1]*step,5,95); const dancer=state.dancers.find(item=>item.id===event.currentTarget.dataset.id);saveState(null,`Movimiento de ${dancer?.name||'bailarín'}`); renderDancers(); renderFormations();
   }
   function renderDancerList(){
     els.dancerCount.textContent=state.dancers.length; els.dancerList.innerHTML='';
@@ -210,7 +269,7 @@
     state.formations.forEach((f,i)=>{
       const card=document.createElement('div'); card.className='formation-card'+(i===state.activeFormation?' active':''); card.tabIndex=0;
       card.innerHTML=`<span class="formation-number">${String(i+1).padStart(2,'0')}</span><div class="formation-preview">${miniPreview(f)}</div><div class="formation-meta"><strong>${escapeHtml(f.name)}</strong><small>${state.dancers.length} bailarines</small></div><div class="formation-cue"><label><span class="sr-only">Tiempo de entrada de ${escapeHtml(f.name)}</span><input class="cue-input" value="${formatTime(f.cue)}" inputmode="decimal" aria-label="Tiempo de entrada de ${escapeHtml(f.name)}"></label><button class="mini-button mark" ${audioReady?'':'disabled'} aria-label="Marcar ${escapeHtml(f.name)} en el momento actual">◎ Marcar ahora</button></div><div class="formation-actions"><button class="mini-button up" aria-label="Mover arriba">↑</button><button class="mini-button down" aria-label="Mover abajo">↓</button><button class="mini-button rename" aria-label="Renombrar">✎</button><button class="mini-button danger delete" aria-label="Eliminar">×</button></div>`;
-      const select=()=>{ if(playback.playing) stopPlayback(false); state.activeFormation=i; saveState(); renderAll(); };
+      const select=()=>{ if(playback.playing) stopPlayback(false); state.activeFormation=i; saveState(null,null,false); renderAll(); };
       card.onclick=e=>{if(!e.target.closest('button')) select();}; card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select();}};
       card.querySelector('.up').onclick=()=>moveFormation(i,-1); card.querySelector('.down').onclick=()=>moveFormation(i,1); card.querySelector('.rename').onclick=()=>renameFormation(i); card.querySelector('.delete').onclick=()=>deleteFormation(i);
       card.querySelector('.cue-input').onchange=e=>setCue(i,parseTime(e.target.value));
@@ -230,7 +289,7 @@
     event.preventDefault(); const name=els.dancerName.value.trim(); if(!name){els.dancerName.focus();return;}
     if(editingDancerId){ const d=state.dancers.find(x=>x.id===editingDancerId); d.name=name; d.color=selectedColor; showToast('Bailarín actualizado'); }
     else { const id=uid(); state.dancers.push({id,name,color:selectedColor}); state.formations.forEach((f,i)=>{f.positions[id]={x:18+(state.dancers.length*11+i*5)%65,y:24+(state.dancers.length*17+i*7)%55};}); showToast('Bailarín agregado'); }
-    saveState(); els.dialog.close(); renderAll();
+    saveState(null,editingDancerId?'Bailarín actualizado':'Bailarín agregado'); els.dialog.close(); renderAll();
   }
   function deleteDancer(id){
     const d=state.dancers.find(x=>x.id===id); if(!d || !confirm(`¿Eliminar a ${d.name} de todas las formaciones?`)) return;
@@ -245,7 +304,7 @@
     const last=state.formations[state.formations.length-1]; state.formations.push({id:uid(),name:`Formación ${state.formations.length+1}`,cue:(last?.cue||0)+8,positions}); state.activeFormation=state.formations.length-1; saveState('Nueva formación creada'); renderAll();
   }
   function moveFormation(i,delta){ const ni=i+delta;if(ni<0||ni>=state.formations.length)return;[state.formations[i],state.formations[ni]]=[state.formations[ni],state.formations[i]];state.activeFormation=ni;normalizeCues();saveState('Secuencia reordenada');renderAll(); }
-  function renameFormation(i){ const name=prompt('Nombre de la formación:',state.formations[i].name);if(name?.trim()){state.formations[i].name=name.trim().slice(0,40);saveState();renderAll();} }
+  function renameFormation(i){ const name=prompt('Nombre de la formación:',state.formations[i].name);if(name?.trim()){state.formations[i].name=name.trim().slice(0,40);saveState(null,'Formación renombrada');renderAll();} }
   function deleteFormation(i){
     if(state.formations.length===1){showToast('La rutina necesita al menos una formación');return;}if(!confirm(`¿Eliminar “${state.formations[i].name}”?`))return;const removed=state.formations[i];state.formations.splice(i,1);delete state.transitions?.[removed.id];Object.values(state.transitions||{}).forEach(targets=>{if(targets&&typeof targets==='object')delete targets[removed.id];});state.activeFormation=clamp(state.activeFormation-(i<=state.activeFormation?1:0),0,state.formations.length-1);saveState('Formación eliminada');renderAll();
   }
@@ -259,7 +318,7 @@
     const previous=index?state.formations[index-1].cue+0.1:0; const next=index<state.formations.length-1?state.formations[index+1].cue-0.1:Infinity; const duration=audioReady&&Number.isFinite(els.audio.duration)?els.audio.duration:Infinity;
     const value=clamp(seconds,previous,Math.min(next,duration)); state.formations[index].cue=Math.round(value*10)/10;
     if(Math.abs(value-seconds)>.05)showToast('Ajustamos la marca para respetar el orden');else showToast(`Marca guardada en ${formatTime(value)}`);
-    saveState();renderFormations();if(audioReady)syncFromAudio(els.audio.currentTime||0);
+    saveState(null,`Tiempo de “${state.formations[index].name}” actualizado`);renderFormations();if(audioReady)syncFromAudio(els.audio.currentTime||0);
   }
   function updatePlaybackLabels(){
     const total=state.formations.length; const next=(state.activeFormation+1)%total; els.playDetail.textContent=audioReady?`${total} formaciones · sincronizadas con la canción`:`${total} ${total===1?'formación':'formaciones'} · ciclo continuo`; els.progressCurrent.textContent=String(state.activeFormation+1).padStart(2,'0'); els.progressNext.textContent=String(next+1).padStart(2,'0');
@@ -305,7 +364,7 @@
     const file=event.target.files?.[0]; if(!file)return;
     if(!(file.type.startsWith('audio/')||file.name.toLowerCase().endsWith('.mp3'))){showToast('Elegí un archivo MP3 válido');event.target.value='';return;}
     if(file.size>MAX_AUDIO_BYTES){showToast('El MP3 supera el máximo de 50 MB');event.target.value='';return;}
-    selectedAudioFile=file;state.musicName=file.name;prepareAudioSource(URL.createObjectURL(file),file.name,false);saveState();showToast('Música lista para sincronizar');
+    selectedAudioFile=file;state.musicName=file.name;prepareAudioSource(URL.createObjectURL(file),file.name,false);saveState(null,'Canción seleccionada');showToast('Música lista para sincronizar');
     if(cloudSession&&activeCloudId)await uploadAudioToCloud(file,activeCloudId);
   }
   function toggleAudio(){ if(!audioReady)return; els.audio.paused?els.audio.play().catch(()=>showToast('No pudimos reproducir este archivo')):els.audio.pause(); }
@@ -385,7 +444,7 @@
     const {data,error}=await cloudClient.from('choreographies').select('id,name,data,audio_path,audio_name,updated_at').eq('id',id).single();
     if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos abrir esta coreografía.');els.cloudLibraryMessage.classList.add('error');return;}
     try{
-      cloudHydrating=true;selectedAudioFile=null;state=importedProject(data.data);state.routineName=cleanText(data.name,state.routineName,60);state.musicName=cleanText(data.audio_name,state.musicName||'',120);activeCloudId=data.id;activeAudioPath=data.audio_path||null;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));clearAudioPlayer();renderAll();await loadCloudAudio(activeAudioPath,state.musicName);setSaveStatus('Guardado en la nube');
+      cloudHydrating=true;selectedAudioFile=null;state=importedProject(data.data);state.routineName=cleanText(data.name,state.routineName,60);state.musicName=cleanText(data.audio_name,state.musicName||'',120);activeCloudId=data.id;activeAudioPath=data.audio_path||null;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));clearAudioPlayer();resetHistory('Coreografía abierta');renderAll();await loadCloudAudio(activeAudioPath,state.musicName);setSaveStatus('Guardado en la nube');
       await refreshCloudList();if(closeDialog)els.cloudDialog.close();showToast(`Abriste “${state.routineName}”`);
     }catch{els.cloudLibraryMessage.textContent='Esta coreografía tiene datos que no pudimos leer.';els.cloudLibraryMessage.classList.add('error');}
     finally{cloudHydrating=false;}
@@ -398,7 +457,7 @@
     const draft=freshState();draft.routineName=nextCloudName();els.cloudLibraryMessage.textContent='Creando coreografía…';
     const {data,error}=await cloudClient.from('choreographies').insert({user_id:cloudSession.user.id,name:draft.routineName,data:draft}).select('id,name,created_at,updated_at').single();
     if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos crear la coreografía.');els.cloudLibraryMessage.classList.add('error');return;}
-    cloudHydrating=true;clearAudioPlayer();selectedAudioFile=null;activeAudioPath=null;state=draft;activeCloudId=data.id;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll();cloudHydrating=false;await refreshCloudList();setSaveStatus('Guardado en la nube');els.cloudDialog.close();showToast(`${draft.routineName} creada`);
+    cloudHydrating=true;clearAudioPlayer();selectedAudioFile=null;activeAudioPath=null;state=draft;activeCloudId=data.id;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));resetHistory('Coreografía creada');renderAll();cloudHydrating=false;await refreshCloudList();setSaveStatus('Guardado en la nube');els.cloudDialog.close();showToast(`${draft.routineName} creada`);
   }
   async function uploadCurrentRoutine(){
     if(!cloudClient||!cloudSession)return;
@@ -412,7 +471,7 @@
     const item=cloudItems.find(entry=>entry.id===id);if(!item)return;const name=prompt('Nuevo nombre:',item.name);if(!name?.trim())return;const safeName=cleanText(name,item.name,60);
     const {error}=await cloudClient.from('choreographies').update({name:safeName,updated_at:new Date().toISOString()}).eq('id',id);
     if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos cambiar el nombre.');els.cloudLibraryMessage.classList.add('error');return;}
-    if(id===activeCloudId){state.routineName=safeName;localStorage.setItem(STORAGE_KEY,JSON.stringify(state));els.routineName.value=safeName;}
+    if(id===activeCloudId){state.routineName=safeName;saveState(null,'Coreografía renombrada',true);els.routineName.value=safeName;}
     await refreshCloudList();showToast('Coreografía renombrada');
   }
   async function duplicateCloudRoutine(id){
@@ -529,7 +588,7 @@
       const next=importedProject(JSON.parse(await file.text()));
       if(!confirm(`Abrir “${next.routineName}” reemplazará la rutina actual en este dispositivo. ¿Continuar?`))return;
       stopPlayback(false);clearAudioPlayer();selectedAudioFile=null;activeAudioPath=null;
-      activeCloudId=null;localStorage.removeItem(ACTIVE_CLOUD_KEY);state=next;saveState();renderAll();showToast('Proyecto abierto y guardado');
+      activeCloudId=null;localStorage.removeItem(ACTIVE_CLOUD_KEY);state=next;saveState(null,'Proyecto abierto');renderAll();showToast('Proyecto abierto y guardado');
     } catch(error){ showToast(error instanceof Error?error.message:'No pudimos abrir este proyecto.'); }
     finally { input.value=''; }
   }
@@ -564,18 +623,28 @@
   $('newCloudRoutineBtn').onclick=createCloudRoutine;$('uploadCurrentBtn').onclick=uploadCurrentRoutine;
   $('closeDialog').onclick=$('cancelDialog').onclick=()=>els.dialog.close(); els.dancerForm.addEventListener('submit',submitDancer);
   els.customColor.oninput=e=>{selectedColor=e.target.value;renderColors();};
-  els.routineName.oninput=e=>{state.routineName=e.target.value;saveState();};
+  els.routineName.oninput=e=>{state.routineName=e.target.value;saveState(null,null,false);clearTimeout(routineNameHistoryTimer);routineNameHistoryTimer=setTimeout(()=>saveState(null,'Nombre de la coreografía actualizado'),650);};
+  els.routineName.onchange=()=>{clearTimeout(routineNameHistoryTimer);saveState(null,'Nombre de la coreografía actualizado');};
   const gridChange=()=>{state.rows=clamp(Number(els.rows.value)||6,2,12);state.cols=clamp(Number(els.cols.value)||9,2,16);els.rows.value=state.rows;els.cols.value=state.cols;saveState('Cuadrícula actualizada');renderGrid();};
-  els.rows.onchange=gridChange;els.cols.onchange=gridChange;els.playBtn.onclick=togglePlayback;els.speed.onchange=e=>{state.speed=Number(e.target.value);saveState();if(playback.playing){playback.started=performance.now();}};
+  els.rows.onchange=gridChange;els.cols.onchange=gridChange;els.playBtn.onclick=togglePlayback;els.speed.onchange=e=>{state.speed=Number(e.target.value);saveState(null,'Velocidad actualizada');if(playback.playing){playback.started=performance.now();}};
   els.frontSide.onchange=e=>{state.frontSide=e.target.value;saveState('Frente del escenario actualizado');renderFront();};
   els.audioInput.onchange=handleAudioFile;els.audioPlay.onclick=toggleAudio;els.audioSeek.oninput=e=>{if(audioReady){els.audio.currentTime=Number(e.target.value);updateAudioTime();syncFromAudio(els.audio.currentTime);}};
-  els.audio.onloadedmetadata=()=>{normalizeCues();saveState();updateAudioTime();renderFormations();};
+  els.audio.onloadedmetadata=()=>{normalizeCues();saveState(null,'Tiempos ajustados');updateAudioTime();renderFormations();};
   els.audio.onplay=()=>{playback.playing=false;playback.previewOnly=false;cancelAnimationFrame(playback.frame);els.trajectoryPreviewBtn.textContent='▶ Probar';if(trajectoryEditing){trajectoryEditing=false;renderTrajectoryEditor();}els.audioPlay.textContent='Ⅱ';els.playIcon.textContent='Ⅱ';els.playStatus.textContent='Sincronizando con la música';cancelAnimationFrame(audioFrame);audioFrame=requestAnimationFrame(tickAudio);};
   els.audio.onpause=()=>{els.audioPlay.textContent='▶';els.playIcon.textContent='▶';if(audioReady&&!els.audio.ended)els.playStatus.textContent='Música en pausa';cancelAnimationFrame(audioFrame);updateAudioTime();syncFromAudio(els.audio.currentTime);};
   els.audio.onended=()=>{els.playStatus.textContent='Fin de la canción';els.audioPlay.textContent='▶';els.playIcon.textContent='▶';};
   document.querySelectorAll('.mobile-tabs button').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.mobile-tabs button').forEach(b=>b.classList.toggle('active',b===btn));document.querySelectorAll('.workspace > aside, .stage-workspace').forEach(p=>p.classList.toggle('mobile-active',p.classList.contains(btn.dataset.panel)));});
   document.querySelector('.stage-workspace').classList.add('mobile-active');
+  els.undoBtn.onclick=undoHistory;els.redoBtn.onclick=redoHistory;els.historyBtn.onclick=()=>setHistoryOpen(!els.historyDrawer.classList.contains('open'));$('closeHistoryBtn').onclick=()=>setHistoryOpen(false);els.historyBackdrop.onclick=()=>setHistoryOpen(false);
+  document.addEventListener('keydown',event=>{
+    const editing=event.target.matches?.('input, textarea, select, [contenteditable="true"]');
+    if(event.key==='Escape'&&els.historyDrawer.classList.contains('open')){setHistoryOpen(false);return;}
+    if(editing||!(event.ctrlKey||event.metaKey))return;
+    if(event.key.toLowerCase()==='z'){event.preventDefault();event.shiftKey?redoHistory():undoHistory();}
+    else if(event.key.toLowerCase()==='y'){event.preventDefault();redoHistory();}
+  });
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&playback.playing)pausePlayback();});
+  initializeHistory();
   renderAll();
   initCloud();
 })();

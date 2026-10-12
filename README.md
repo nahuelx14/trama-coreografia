@@ -22,6 +22,10 @@ Aplicación pública: <https://nahuelx14.github.io/trama-coreografia/>
 - Recuperación de contraseña por correo electrónico.
 - Códigos para copiar una coreografía a otra cuenta.
 - MP3 privados sincronizados entre dispositivos mediante Supabase Storage.
+- Trayectorias rectas o curvas configurables para cada bailarín entre dos formaciones.
+- Historial local de hasta 40 cambios, con acceso rápido para deshacer y opción de rehacer.
+- Paneles plegables de Música y Archivo para mantener despejada la mesa de trabajo.
+- Pizarra con tamaño estable y respuesta proporcional al zoom del navegador.
 
 ## Ejecutar localmente
 

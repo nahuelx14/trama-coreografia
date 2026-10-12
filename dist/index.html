@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f2eb">
   <meta name="description" content="Diseñá, ordená y animá formaciones coreográficas.">
   <title>Trama — Diseñador coreográfico</title>
-  <link rel="stylesheet" href="styles.css?v=20261012-stage2-paths">
+  <link rel="stylesheet" href="styles.css?v=20261012-final">
 </head>
 <body>
   <div class="app-shell">
@@ -41,7 +41,7 @@
       <section class="stage-workspace">
         <div class="stage-toolbar">
           <div>
-            <span class="eyebrow">LIENZO</span><span class="lab-badge">ETAPA 2 · PRUEBA</span>
+            <span class="eyebrow">LIENZO</span><span class="lab-badge">VERSIÓN FINAL</span>
             <h1 id="formationTitle">Formación 01</h1>
           </div>
           <div class="stage-settings">
@@ -90,20 +90,24 @@
           </div>
         </section>
 
-        <section class="music-card" aria-label="Música de la coreografía">
-          <div class="music-info">
-            <span class="music-icon" aria-hidden="true">♪</span>
-            <div><span class="eyebrow" id="musicEyebrow">MÚSICA LOCAL</span><strong id="musicFileName">Sumá la canción de la rutina</strong><small id="musicPrivacy">Si la coreografía está en la nube, el MP3 también se sincroniza.</small></div>
+        <details class="music-card disclosure-card" id="musicDisclosure">
+          <summary class="music-summary" aria-label="Mostrar u ocultar opciones de música">
+            <div class="music-info">
+              <span class="music-icon" aria-hidden="true">♪</span>
+              <div><span class="eyebrow" id="musicEyebrow">MÚSICA LOCAL</span><strong id="musicFileName">Sumá la canción de la rutina</strong><small id="musicPrivacy">Si la coreografía está en la nube, el MP3 también se sincroniza.</small></div>
+            </div>
+          </summary>
+          <div class="music-card-body">
+            <label class="file-button" for="audioInput"><span id="fileButtonText">Elegir MP3</span><input id="audioInput" type="file" accept="audio/mpeg,audio/mp3,.mp3"></label>
+            <div class="music-transport">
+              <button class="audio-play" id="audioPlayBtn" type="button" disabled aria-label="Reproducir música">▶</button>
+              <span id="audioCurrent">0:00</span>
+              <input id="audioSeek" type="range" min="0" max="100" value="0" step="0.05" disabled aria-label="Posición de la canción">
+              <span id="audioDuration">0:00</span>
+            </div>
+            <audio id="audio" preload="metadata"></audio>
           </div>
-          <label class="file-button" for="audioInput"><span id="fileButtonText">Elegir MP3</span><input id="audioInput" type="file" accept="audio/mpeg,audio/mp3,.mp3"></label>
-          <div class="music-transport">
-            <button class="audio-play" id="audioPlayBtn" type="button" disabled aria-label="Reproducir música">▶</button>
-            <span id="audioCurrent">0:00</span>
-            <input id="audioSeek" type="range" min="0" max="100" value="0" step="0.05" disabled aria-label="Posición de la canción">
-            <span id="audioDuration">0:00</span>
-          </div>
-          <audio id="audio" preload="metadata"></audio>
-        </section>
+        </details>
 
         <section class="playback-card" aria-label="Reproducción">
           <div class="play-controls">
@@ -134,18 +138,21 @@
         <div class="formations-list" id="formationsList"></div>
         <button class="primary-button full" id="duplicateBtn"><span>⧉</span> Duplicar formación actual</button>
         <button class="text-button full" id="newFormationBtn"><span>＋</span> Nueva formación vacía</button>
-        <section class="project-files" aria-labelledby="projectFilesTitle">
-          <span class="eyebrow">ARCHIVO</span>
-          <h3 id="projectFilesTitle">Copia de la rutina</h3>
-          <p>Guardá un proyecto para recuperarlo, pasarlo a otro dispositivo o compartirlo.</p>
-          <div class="project-file-actions">
-            <button class="file-action primary" id="exportProjectBtn" type="button">↓ Guardar proyecto</button>
-            <label class="file-action" for="importProjectInput">↑ Abrir proyecto<input id="importProjectInput" type="file" accept="application/json,.json,.trama.json"></label>
-            <button class="file-action" id="exportCsvBtn" type="button">CSV Posiciones</button>
-            <button class="file-action" id="exportSheetsBtn" type="button">▦ Láminas</button>
+        <details class="project-files disclosure-card" id="archiveDisclosure">
+          <summary class="archive-summary" aria-label="Mostrar u ocultar opciones de archivo">
+            <div><span class="eyebrow">ARCHIVO</span><h3 id="projectFilesTitle">Copia de la rutina</h3></div>
+          </summary>
+          <div class="project-files-body">
+            <p>Guardá un proyecto para recuperarlo, pasarlo a otro dispositivo o compartirlo.</p>
+            <div class="project-file-actions">
+              <button class="file-action primary" id="exportProjectBtn" type="button">↓ Guardar proyecto</button>
+              <label class="file-action" for="importProjectInput">↑ Abrir proyecto<input id="importProjectInput" type="file" accept="application/json,.json,.trama.json"></label>
+              <button class="file-action" id="exportCsvBtn" type="button">CSV Posiciones</button>
+              <button class="file-action" id="exportSheetsBtn" type="button">▦ Láminas</button>
+            </div>
+            <small>El proyecto incluye toda la edición. El MP3 no se incorpora al archivo.</small>
           </div>
-          <small>El proyecto incluye toda la edición. El MP3 no se incorpora al archivo.</small>
-        </section>
+        </details>
       </aside>
     </main>
 
@@ -155,6 +162,29 @@
       <button data-panel="formations-panel">▤ Secuencia</button>
     </footer>
   </div>
+
+  <nav class="history-dock" aria-label="Acciones de historial">
+    <button id="undoBtn" type="button" title="Deshacer último cambio" aria-label="Deshacer último cambio" disabled>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5M5 12h8a6 6 0 0 1 6 6"/></svg>
+    </button>
+    <button id="historyBtn" type="button" title="Ver historial" aria-label="Abrir historial" aria-expanded="false" aria-controls="historyDrawer">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.7 9A8 8 0 1 1 4 12M4.7 9H9M4.7 9V4.7M12 7v5l3 2"/></svg>
+    </button>
+  </nav>
+
+  <button class="history-backdrop" id="historyBackdrop" type="button" aria-label="Cerrar historial" tabindex="-1"></button>
+  <aside class="history-drawer" id="historyDrawer" aria-hidden="true" aria-label="Historial de cambios">
+    <header class="history-heading">
+      <div><span class="eyebrow">EDICIÓN</span><h2>Historial</h2></div>
+      <button type="button" class="close-button" id="closeHistoryBtn" aria-label="Cerrar historial">×</button>
+    </header>
+    <p class="history-intro">Volvé a un momento anterior de la coreografía. Si cambiás algo después, se crea un nuevo camino desde ese punto.</p>
+    <div class="history-list" id="historyList"></div>
+    <footer class="history-footer">
+      <span id="historyStatus" aria-live="polite"></span>
+      <button class="text-button bordered" id="redoBtn" type="button" disabled>Rehacer</button>
+    </footer>
+  </aside>
 
   <dialog id="dancerDialog">
     <form method="dialog" id="dancerForm" class="dialog-card">
@@ -213,6 +243,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20261012-stage2-paths"></script>
+  <script src="app.js?v=20261012-final"></script>
 </body>
 </html>
