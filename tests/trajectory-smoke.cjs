@@ -31,6 +31,30 @@ const { chromium } = require(playwrightModule);
   if (!(await page.locator('#exportProjectBtn').isVisible())) throw new Error('Archivo no desplegó sus opciones.');
   await page.locator('#archiveDisclosure > summary').click();
 
+  if (!(await page.locator('#playFromStartBtn').isVisible()) || !(await page.locator('#playFromSelectedBtn').isVisible())) throw new Error('No aparecen las dos opciones de inicio de la reproducción.');
+  await page.locator('.formation-card').nth(2).locator('.formation-meta').click();
+  const selectedStartLabel = await page.locator('#playSelectedLabel').innerText();
+  if (!selectedStartLabel.includes('03') || !selectedStartLabel.includes('Cierre')) throw new Error('La opción seleccionada no refleja la formación activa.');
+  await page.locator('#playFromSelectedBtn').click();
+  await page.waitForTimeout(80);
+  const fromSelected = await page.evaluate(() => ({
+    activeNumber: document.querySelector('.formation-card.active .formation-number')?.textContent,
+    current: document.getElementById('progressCurrent').textContent,
+    status: document.getElementById('playStatus').textContent,
+  }));
+  if (fromSelected.activeNumber !== '03' || fromSelected.current !== '03' || !fromSelected.status.includes('Cierre')) throw new Error('La reproducción no comenzó desde la formación seleccionada.');
+  await page.locator('#playBtn').click();
+  await page.locator('#playFromStartBtn').click();
+  await page.waitForTimeout(80);
+  const fromStart = await page.evaluate(() => ({
+    activeNumber: document.querySelector('.formation-card.active .formation-number')?.textContent,
+    current: document.getElementById('progressCurrent').textContent,
+    status: document.getElementById('playStatus').textContent,
+  }));
+  if (fromStart.activeNumber !== '01' || fromStart.current !== '01' || !fromStart.status.includes('inicio')) throw new Error('La reproducción no volvió al inicio.');
+  await page.locator('#playBtn').click();
+  await page.locator('.formation-card').first().locator('.formation-meta').click();
+
   const initialPosition = await page.evaluate(() => {
     const dancer = document.querySelector('.dancer-node');
     return { dancerId: dancer.dataset.id, x: Number(dancer.style.getPropertyValue('--x')), y: Number(dancer.style.getPropertyValue('--y')) };
@@ -138,7 +162,7 @@ const { chromium } = require(playwrightModule);
   if (!resetDisabled) throw new Error('El botón Recta no limpió el recorrido.');
   if (errors.length) throw new Error(`Errores de navegador: ${errors.join(' | ')}`);
 
-  console.log(JSON.stringify({ ok: true, badge, quickUndo: { initialPosition, movedPosition, restoredPosition }, afterDrag, persisted, undone, redone, zoomLayout, mobile }, null, 2));
+  console.log(JSON.stringify({ ok: true, badge, startModes: { selectedStartLabel, fromSelected, fromStart }, quickUndo: { initialPosition, movedPosition, restoredPosition }, afterDrag, persisted, undone, redone, zoomLayout, mobile }, null, 2));
   await browser.close();
 })().catch(error => {
   console.error(error.stack || error);

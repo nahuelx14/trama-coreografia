@@ -154,13 +154,20 @@ kbd { font-family: inherit; background: white; border: 1px solid var(--line); bo
 .audio-play { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--navy); color: white; cursor: pointer; font-size: 9px; }
 .audio-play:disabled { cursor: not-allowed; opacity: .3; }
 .music-transport input[type="range"] { width: 100%; accent-color: var(--accent); }
-.playback-card { margin-top: auto; padding: 18px 20px; border-radius: 14px; background: var(--navy); color: white; display: grid; grid-template-columns: minmax(190px,.8fr) minmax(220px,1.4fr) auto; align-items: center; gap: 25px; box-shadow: var(--shadow); }
+.playback-card { margin-top: auto; padding: 18px 20px; border-radius: 14px; background: var(--navy); color: white; display: grid; grid-template-columns: minmax(165px,.75fr) minmax(235px,1.05fr) minmax(150px,1fr) auto; align-items: center; gap: 16px; box-shadow: var(--shadow); }
 .play-controls { display: flex; align-items: center; gap: 13px; }
 .play-button { width: 45px; height: 45px; flex: 0 0 auto; border-radius: 50%; border: 0; background: var(--accent); color: white; cursor: pointer; display: grid; place-items: center; box-shadow: 0 6px 18px rgba(255,91,91,.33); }
 .play-button:hover { transform: scale(1.04); }
 .play-copy { display: flex; flex-direction: column; min-width: 0; }
 .play-copy strong { font-family: Georgia, serif; font-size: 14px; }
 .play-copy small { margin-top: 4px; color: #aeb5c6; font-size: 10px; }
+.play-start-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.play-start-button { min-width: 0; min-height: 43px; display: flex; align-items: center; gap: 7px; border: 1px solid #566077; border-radius: 8px; background: #313b55; color: white; padding: 7px 9px; cursor: pointer; text-align: left; font-size: 9px; font-weight: 800; line-height: 1.1; }
+.play-start-button:hover { border-color: #929bb0; background: #3b4661; }
+.play-start-button.selected { border-color: rgba(255,91,91,.72); }
+.play-start-button > span:first-child { flex: 0 0 auto; color: var(--accent); font-size: 12px; }
+.play-start-button > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.play-start-button small { overflow: hidden; color: #aeb5c6; font-size: 8px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .progress-track { height: 3px; background: #4a5269; border-radius: 3px; overflow: hidden; }
 .progress-fill { height: 100%; width: 0; background: var(--accent); }
 .progress-labels { display: flex; justify-content: space-between; font-size: 9px; color: #aeb5c6; margin-top: 6px; }

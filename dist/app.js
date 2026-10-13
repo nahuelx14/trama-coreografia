@@ -52,6 +52,7 @@
     audio:$('audio'), audioInput:$('audioInput'), audioPlay:$('audioPlayBtn'), audioSeek:$('audioSeek'), audioCurrent:$('audioCurrent'), audioDuration:$('audioDuration'), musicFileName:$('musicFileName'), musicPrivacy:$('musicPrivacy'), musicEyebrow:$('musicEyebrow'), fileButtonText:$('fileButtonText'), fileButton:document.querySelector('.file-button'),
     routineName:$('routineName'), dialog:$('dancerDialog'), dancerForm:$('dancerForm'), dancerName:$('dancerName'), dialogTitle:$('dialogTitle'),
     colorOptions:$('colorOptions'), customColor:$('customColor'), toast:$('toast'), playBtn:$('playBtn'), playIcon:$('playIcon'),
+    playFromStartBtn:$('playFromStartBtn'), playFromSelectedBtn:$('playFromSelectedBtn'), playSelectedLabel:$('playSelectedLabel'),
     playStatus:$('playStatus'), playDetail:$('playDetail'), progressFill:$('progressFill'), progressCurrent:$('progressCurrent'), progressNext:$('progressNext'), speed:$('speedSelect'),
     saveState:$('saveState'), saveStateText:$('saveStateText'), cloudDialog:$('cloudDialog'), cloudSignedOut:$('cloudSignedOut'), cloudSignedIn:$('cloudSignedIn'),
     cloudEmail:$('cloudEmail'), cloudPassword:$('cloudPassword'), cloudLoginBtn:$('cloudLoginBtn'), cloudSignUpBtn:$('cloudSignUpBtn'), cloudAuthMessage:$('cloudAuthMessage'), cloudUserEmail:$('cloudUserEmail'), cloudList:$('cloudList'), cloudLibraryMessage:$('cloudLibraryMessage'),
@@ -276,7 +277,7 @@
       card.querySelector('.mark').onclick=()=>setCue(i,els.audio.currentTime);
       els.formationsList.appendChild(card);
     });
-    els.formationTitle.textContent=`${currentFormation().name} · ${String(state.activeFormation+1).padStart(2,'0')}`;
+    els.formationTitle.textContent=`${currentFormation().name} · ${String(state.activeFormation+1).padStart(2,'0')}`;updatePlaybackLabels();
   }
   function openDancerDialog(id=null){
     editingDancerId=id; const dancer=state.dancers.find(d=>d.id===id); selectedColor=dancer?.color || palette[state.dancers.length%palette.length];
@@ -321,14 +322,23 @@
     saveState(null,`Tiempo de “${state.formations[index].name}” actualizado`);renderFormations();if(audioReady)syncFromAudio(els.audio.currentTime||0);
   }
   function updatePlaybackLabels(){
-    const total=state.formations.length; const next=(state.activeFormation+1)%total; els.playDetail.textContent=audioReady?`${total} formaciones · sincronizadas con la canción`:`${total} ${total===1?'formación':'formaciones'} · ciclo continuo`; els.progressCurrent.textContent=String(state.activeFormation+1).padStart(2,'0'); els.progressNext.textContent=String(next+1).padStart(2,'0');
+    const total=state.formations.length; const next=(state.activeFormation+1)%total; const active=state.formations[state.activeFormation]; const number=String(state.activeFormation+1).padStart(2,'0');
+    els.playDetail.textContent=audioReady?`${total} formaciones · sincronizadas con la canción`:`${total} ${total===1?'formación':'formaciones'} · ciclo continuo`; els.progressCurrent.textContent=number; els.progressNext.textContent=String(next+1).padStart(2,'0');
+    els.playSelectedLabel.textContent=`${number} · ${active?.name||'Formación'}`;els.playFromSelectedBtn.setAttribute('aria-label',`Reproducir desde ${active?.name||'la formación seleccionada'}, formación ${number}`);
   }
   function togglePlayback(){ if(audioReady){toggleAudio();return;} if(state.formations.length<2){showToast('Agregá otra formación para animar');return;} playback.playing?pausePlayback():startPlayback(); }
+  function startPlaybackFrom(index){
+    if(!state.formations.length)return;const startIndex=clamp(Math.round(Number(index)||0),0,state.formations.length-1),formation=state.formations[startIndex];
+    if(trajectoryEditing){trajectoryEditing=false;renderTrajectoryEditor();}cancelAnimationFrame(playback.frame);playback.playing=false;playback.previewOnly=false;playback.pausedAt=0;state.activeFormation=startIndex;renderFormations();renderTrajectoryEditor();updatePlaybackLabels();
+    if(audioReady){
+      if(!els.audio.paused)els.audio.pause();const duration=Number.isFinite(els.audio.duration)?Math.max(0,els.audio.duration-.01):Infinity,target=clamp(Number(formation.cue)||0,0,duration);els.audio.currentTime=target;updateAudioTime();syncFromAudio(target);
+      els.audio.play().catch(()=>showToast('No pudimos reproducir este archivo'));showToast(startIndex===0?'Reproduciendo desde el inicio':`Reproduciendo desde ${formation.name}`);return;
+    }
+    if(state.formations.length<2){showToast('Agregá otra formación para animar');return;}playback.from=startIndex;playback.to=(startIndex+1)%state.formations.length;playback.started=performance.now();playback.playing=true;els.playIcon.textContent='Ⅱ';els.playStatus.textContent=startIndex===0?'Reproduciendo desde el inicio':`Reproduciendo desde ${formation.name}`;showToast(els.playStatus.textContent);playback.frame=requestAnimationFrame(tickPlayback);
+  }
   function startPlayback(){
-    if(trajectoryEditing){trajectoryEditing=false;renderTrajectoryEditor();}playback.playing=true;playback.previewOnly=false;
-    if(playback.pausedAt>0){ playback.started=performance.now()-playback.pausedAt; playback.pausedAt=0; }
-    else { playback.from=state.activeFormation; playback.to=(playback.from+1)%state.formations.length; playback.started=performance.now(); }
-    els.playIcon.textContent='Ⅱ';els.playStatus.textContent='Reproduciendo secuencia';playback.frame=requestAnimationFrame(tickPlayback);
+    if(playback.pausedAt>0){if(trajectoryEditing){trajectoryEditing=false;renderTrajectoryEditor();}playback.playing=true;playback.previewOnly=false;playback.started=performance.now()-playback.pausedAt;playback.pausedAt=0;els.playIcon.textContent='Ⅱ';els.playStatus.textContent='Reproduciendo secuencia';playback.frame=requestAnimationFrame(tickPlayback);return;}
+    startPlaybackFrom(state.activeFormation);
   }
   function pausePlayback(){ playback.playing=false; playback.pausedAt=Math.max(0,performance.now()-playback.started); cancelAnimationFrame(playback.frame);if(playback.previewOnly){playback.previewOnly=false;els.trajectoryPreviewBtn.textContent='▶ Probar';}els.playIcon.textContent='▶';els.playStatus.textContent='Secuencia en pausa'; }
   function stopPlayback(render=true){ playback.playing=false;playback.previewOnly=false;playback.pausedAt=0;cancelAnimationFrame(playback.frame);els.trajectoryPreviewBtn.textContent='▶ Probar';els.playIcon.textContent='▶';els.playStatus.textContent='Lista para ensayar';els.progressFill.style.width='0%';if(render){renderDancers();renderTrajectoryOverlay();} }
@@ -626,7 +636,7 @@
   els.routineName.oninput=e=>{state.routineName=e.target.value;saveState(null,null,false);clearTimeout(routineNameHistoryTimer);routineNameHistoryTimer=setTimeout(()=>saveState(null,'Nombre de la coreografía actualizado'),650);};
   els.routineName.onchange=()=>{clearTimeout(routineNameHistoryTimer);saveState(null,'Nombre de la coreografía actualizado');};
   const gridChange=()=>{state.rows=clamp(Number(els.rows.value)||6,2,12);state.cols=clamp(Number(els.cols.value)||9,2,16);els.rows.value=state.rows;els.cols.value=state.cols;saveState('Cuadrícula actualizada');renderGrid();};
-  els.rows.onchange=gridChange;els.cols.onchange=gridChange;els.playBtn.onclick=togglePlayback;els.speed.onchange=e=>{state.speed=Number(e.target.value);saveState(null,'Velocidad actualizada');if(playback.playing){playback.started=performance.now();}};
+  els.rows.onchange=gridChange;els.cols.onchange=gridChange;els.playBtn.onclick=togglePlayback;els.playFromStartBtn.onclick=()=>startPlaybackFrom(0);els.playFromSelectedBtn.onclick=()=>startPlaybackFrom(state.activeFormation);els.speed.onchange=e=>{state.speed=Number(e.target.value);saveState(null,'Velocidad actualizada');if(playback.playing){playback.started=performance.now();}};
   els.frontSide.onchange=e=>{state.frontSide=e.target.value;saveState('Frente del escenario actualizado');renderFront();};
   els.audioInput.onchange=handleAudioFile;els.audioPlay.onclick=toggleAudio;els.audioSeek.oninput=e=>{if(audioReady){els.audio.currentTime=Number(e.target.value);updateAudioTime();syncFromAudio(els.audio.currentTime);}};
   els.audio.onloadedmetadata=()=>{normalizeCues();saveState(null,'Tiempos ajustados');updateAudioTime();renderFormations();};

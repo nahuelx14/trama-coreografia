@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f2eb">
   <meta name="description" content="Diseñá, ordená y animá formaciones coreográficas.">
   <title>Trama — Diseñador coreográfico</title>
-  <link rel="stylesheet" href="styles.css?v=20261012-final">
+  <link rel="stylesheet" href="styles.css?v=20261012-play-start">
 </head>
 <body>
   <div class="app-shell">
@@ -113,6 +113,14 @@
           <div class="play-controls">
             <button class="play-button" id="playBtn" aria-label="Reproducir secuencia"><span id="playIcon">▶</span></button>
             <div class="play-copy"><strong id="playStatus">Lista para ensayar</strong><small id="playDetail">3 formaciones · ciclo continuo</small></div>
+          </div>
+          <div class="play-start-actions" aria-label="Elegir desde dónde reproducir">
+            <button class="play-start-button" id="playFromStartBtn" type="button">
+              <span aria-hidden="true">↺</span><span>Desde el inicio<small>Formación 01</small></span>
+            </button>
+            <button class="play-start-button selected" id="playFromSelectedBtn" type="button">
+              <span aria-hidden="true">▶</span><span>Desde la seleccionada<small id="playSelectedLabel">01 · Entrada</small></span>
+            </button>
           </div>
           <div class="progress-wrap">
             <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
@@ -243,6 +251,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20261012-final"></script>
+  <script src="app.js?v=20261012-play-start"></script>
 </body>
 </html>
