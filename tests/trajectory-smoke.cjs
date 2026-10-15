@@ -31,6 +31,14 @@ const { chromium } = require(playwrightModule);
   if (!(await page.locator('#exportProjectBtn').isVisible())) throw new Error('Archivo no desplegó sus opciones.');
   await page.locator('#archiveDisclosure > summary').click();
 
+  const cueInput = page.locator('.formation-card').nth(1).locator('.cue-input');
+  await cueInput.click();
+  if (!(await cueInput.evaluate(input => document.activeElement === input))) throw new Error('El campo de tiempo pierde el foco al tocarlo.');
+  await cueInput.fill('0:12');
+  await cueInput.press('Enter');
+  const editedCue = await page.evaluate(() => JSON.parse(localStorage.getItem('trama-coreografia-v1')).formations.find(formation => formation.name === 'Diagonal')?.cue);
+  if (editedCue !== 12) throw new Error('El tiempo escrito no quedó guardado en la formación.');
+
   if (!(await page.locator('#playFromStartBtn').isVisible()) || !(await page.locator('#playFromSelectedBtn').isVisible())) throw new Error('No aparecen las dos opciones de inicio de la reproducción.');
   await page.locator('.formation-card').nth(2).locator('.formation-meta').click();
   const selectedStartLabel = await page.locator('#playSelectedLabel').innerText();
