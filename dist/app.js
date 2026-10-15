@@ -19,9 +19,9 @@
   const positionsC = [[50,13],[36,28],[64,28],[24,46],[76,46],[15,68],[34,68],[50,80],[66,68],[85,68]];
   const toMap = values => Object.fromEntries(defaultDancers.map((d,i) => [d.id,{x:values[i][0],y:values[i][1]}]));
   const freshState = () => ({ routineName:'Nueva coreografía', rows:6, cols:9, frontSide:'right', musicName:'', musicPath:'', dancers:defaultDancers, formations:[
-    {id:uid(),name:'Entrada',cue:0,positions:toMap(positionsA)},
-    {id:uid(),name:'Diagonal',cue:8,positions:toMap(positionsB)},
-    {id:uid(),name:'Cierre',cue:16,positions:toMap(positionsC)}
+    {id:uid(),name:'Entrada',cue:0,positions:toMap(positionsA),dimmedDancers:[]},
+    {id:uid(),name:'Diagonal',cue:8,positions:toMap(positionsB),dimmedDancers:[]},
+    {id:uid(),name:'Cierre',cue:16,positions:toMap(positionsC),dimmedDancers:[]}
   ], transitions:{}, activeFormation:0, speed:950 });
   let state = loadState();
   let editingDancerId = null;
@@ -40,6 +40,7 @@
   let passwordRecoveryMode = false;
   let trajectoryEditing = false;
   let selectedTrajectoryDancerId = null;
+  let selectedDancerIds = new Set();
   let historyEntries = [];
   let historyIndex = -1;
   let routineNameHistoryTimer = null;
@@ -58,7 +59,8 @@
     cloudEmail:$('cloudEmail'), cloudPassword:$('cloudPassword'), cloudLoginBtn:$('cloudLoginBtn'), cloudSignUpBtn:$('cloudSignUpBtn'), cloudAuthMessage:$('cloudAuthMessage'), cloudUserEmail:$('cloudUserEmail'), cloudList:$('cloudList'), cloudLibraryMessage:$('cloudLibraryMessage'),
     cloudPasswordRecovery:$('cloudPasswordRecovery'), recoveryPassword:$('recoveryPassword'), recoveryPasswordConfirm:$('recoveryPasswordConfirm'), recoveryMessage:$('recoveryMessage'), shareCodeInput:$('shareCodeInput'),
     trajectoryTitle:$('trajectoryTitle'), trajectoryHint:$('trajectoryHint'), trajectoryDancer:$('trajectoryDancer'), trajectoryEditBtn:$('trajectoryEditBtn'), trajectoryResetBtn:$('trajectoryResetBtn'), trajectoryPreviewBtn:$('trajectoryPreviewBtn'),
-    undoBtn:$('undoBtn'), redoBtn:$('redoBtn'), historyBtn:$('historyBtn'), historyDrawer:$('historyDrawer'), historyBackdrop:$('historyBackdrop'), historyList:$('historyList'), historyStatus:$('historyStatus')
+    undoBtn:$('undoBtn'), redoBtn:$('redoBtn'), historyBtn:$('historyBtn'), historyDrawer:$('historyDrawer'), historyBackdrop:$('historyBackdrop'), historyList:$('historyList'), historyStatus:$('historyStatus'),
+    selectionToolbar:$('selectionToolbar'), selectionCount:$('selectionCount'), selectionHint:$('selectionHint'), toggleDancerDimBtn:$('toggleDancerDimBtn'), toggleDancerDimLabel:$('toggleDancerDimLabel'), clearDancerSelectionBtn:$('clearDancerSelectionBtn')
   };
 
   function uid(){ return 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -109,7 +111,7 @@
   }
   function restoreHistory(index,message){
     if(index<0||index>=historyEntries.length||index===historyIndex)return;
-    if(playback.playing)stopPlayback(false);if(audioReady&&!els.audio.paused)els.audio.pause();const active=state.activeFormation;
+    if(playback.playing)stopPlayback(false);if(audioReady&&!els.audio.paused)els.audio.pause();clearDancerSelection(false);const active=state.activeFormation;
     state=importedProject(historyEntries[index].state);state.activeFormation=clamp(active,0,state.formations.length-1);historyIndex=index;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(state));persistHistory();if(cloudSession&&activeCloudId&&!cloudHydrating)scheduleCloudSave();else if(!activeCloudId)setSaveStatus('Guardado en este dispositivo');
     renderAll();showToast(message||`Volviste a “${historyEntries[index].label}”`);
@@ -130,6 +132,7 @@
   function currentFormation(){ return state.formations[state.activeFormation]; }
   function ensurePositions(formation){
     state.dancers.forEach((d,i)=>{ if(!formation.positions[d.id]) formation.positions[d.id] = {x:20+(i%5)*15,y:30+Math.floor(i/5)*25}; });
+    formation.dimmedDancers=Array.isArray(formation.dimmedDancers)?formation.dimmedDancers.filter(id=>state.dancers.some(dancer=>dancer.id===id)):[];
   }
   function nextFormationIndex(index){ return state.formations.length<2?index:(index+1)%state.formations.length; }
   function transitionMap(fromIndex,toIndex,create=false){
@@ -186,18 +189,33 @@
     els.musicPrivacy.textContent=linkedPath?(cloudSession?'Cargando el audio asociado a esta coreografía…':'Iniciá sesión para recuperar el audio asociado.'):state.musicName?'La canción todavía no está disponible en este dispositivo.':'Si la coreografía está en la nube, el MP3 también se sincroniza.';
     els.fileButtonText.textContent=state.musicName?'Cambiar MP3':'Elegir MP3';
   }
+  function isDancerDimmed(formation,dancerId){return Array.isArray(formation?.dimmedDancers)&&formation.dimmedDancers.includes(dancerId);}
+  function updateDancerSelectionUI(){
+    selectedDancerIds=new Set([...selectedDancerIds].filter(id=>state.dancers.some(dancer=>dancer.id===id)));
+    els.dancerLayer.querySelectorAll('.dancer-node').forEach(node=>{const selected=!trajectoryEditing&&selectedDancerIds.has(node.dataset.id);node.classList.toggle('group-selected',selected);node.setAttribute('aria-pressed',String(selected));});
+    const count=trajectoryEditing?0:selectedDancerIds.size;els.selectionToolbar.hidden=!count;if(!count)return;
+    els.selectionCount.textContent=`${count} ${count===1?'bailarín seleccionado':'bailarines seleccionados'}`;els.selectionHint.textContent=count===1?'Arrastralo para moverlo. Ctrl + clic suma otros.':`Arrastrá cualquiera para mover los ${count} juntos.`;
+    const dimmed=selectedDancerIds.size>0&&[...selectedDancerIds].every(id=>isDancerDimmed(currentFormation(),id));els.toggleDancerDimLabel.textContent=dimmed?'Restaurar color':'Marcar en gris';els.toggleDancerDimBtn.classList.toggle('restore',dimmed);
+  }
+  function clearDancerSelection(update=true){selectedDancerIds.clear();if(update)updateDancerSelectionUI();}
+  function toggleSelectedDancersDimmed(){
+    if(!selectedDancerIds.size||trajectoryEditing)return;const formation=currentFormation(),current=new Set(formation.dimmedDancers||[]),allDimmed=[...selectedDancerIds].every(id=>current.has(id));
+    selectedDancerIds.forEach(id=>allDimmed?current.delete(id):current.add(id));formation.dimmedDancers=[...current];const count=selectedDancerIds.size,message=allDimmed?(count===1?'Color restaurado':'Colores restaurados'):(count===1?'Bailarín marcado en gris':`${count} bailarines marcados en gris`);saveState(message,allDimmed?'Color de bailarín restaurado':'Estado gris de bailarín actualizado');renderDancers();renderFormations();
+  }
   function renderDancers(displayPositions){
     const positions = displayPositions || currentFormation().positions;
     els.dancerLayer.innerHTML = '';
     state.dancers.forEach(dancer => {
       const pos = positions[dancer.id] || {x:50,y:50};
-      const node = document.createElement('button'); node.type='button'; node.className='dancer-node'+(trajectoryEditing&&dancer.id===selectedTrajectoryDancerId?' trajectory-selected':''); node.dataset.id=dancer.id;
+      const dimmed=isDancerDimmed(currentFormation(),dancer.id);const selected=!trajectoryEditing&&selectedDancerIds.has(dancer.id);
+      const node = document.createElement('button'); node.type='button'; node.className=`dancer-node${trajectoryEditing&&dancer.id===selectedTrajectoryDancerId?' trajectory-selected':''}${selected?' group-selected':''}${dimmed?' dimmed':''}`; node.dataset.id=dancer.id;
       node.style.setProperty('--x',pos.x); node.style.setProperty('--y',pos.y); node.style.setProperty('--color',dancer.color);
-      node.setAttribute('aria-label',trajectoryEditing?`Editar trayectoria de ${dancer.name}`:`${dancer.name}. Posición ${Math.round(pos.x)}, ${Math.round(pos.y)}. Arrastrar para mover.`);
+      node.setAttribute('aria-pressed',String(selected));node.setAttribute('aria-label',trajectoryEditing?`Editar trayectoria de ${dancer.name}`:`${dancer.name}${dimmed?', marcado en gris':''}. Posición ${Math.round(pos.x)}, ${Math.round(pos.y)}. Arrastrar para mover. Control más clic para seleccionar varios.`);
       node.innerHTML = `<span class="node-dot">${escapeHtml(initials(dancer.name))}</span><span class="node-label">${escapeHtml(dancer.name)}</span>`;
       if(trajectoryEditing)node.addEventListener('click',()=>selectTrajectoryDancer(dancer.id));else{node.addEventListener('pointerdown', startDrag);node.addEventListener('keydown', keyboardMove);}
       els.dancerLayer.appendChild(node);
     });
+    updateDancerSelectionUI();
   }
   function trajectoryPathData(fromIndex,toIndex,dancerId,control){
     const from=state.formations[fromIndex].positions[dancerId]||{x:50,y:50};const to=state.formations[toIndex].positions[dancerId]||from;
@@ -232,28 +250,33 @@
     const up=()=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',up);if(moved)saveState('Trayectoria guardada');renderTrajectoryEditor();};
     handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',up);
   }
-  function toggleTrajectoryEditing(){if(playback.playing)stopPlayback();trajectoryEditing=!trajectoryEditing;renderDancers();renderTrajectoryEditor();if(trajectoryEditing)showToast('Arrastrá el punto rojo para curvar el recorrido');}
+  function toggleTrajectoryEditing(){if(playback.playing)stopPlayback();trajectoryEditing=!trajectoryEditing;if(trajectoryEditing)clearDancerSelection(false);renderDancers();renderTrajectoryEditor();if(trajectoryEditing)showToast('Arrastrá el punto rojo para curvar el recorrido');}
   function resetSelectedTrajectory(){
     if(state.formations.length<2||!selectedTrajectoryDancerId)return;const from=state.formations[state.activeFormation],to=state.formations[nextFormationIndex(state.activeFormation)],map=transitionMap(state.activeFormation,nextFormationIndex(state.activeFormation));if(!map)return;
     delete map[selectedTrajectoryDancerId];if(!Object.keys(map).length){delete state.transitions[from.id][to.id];if(!Object.keys(state.transitions[from.id]).length)delete state.transitions[from.id];}saveState('Recorrido recto restaurado');renderTrajectoryEditor();
   }
   function previewCurrentTransition(){
-    if(state.formations.length<2||playback.playing)return;if(audioReady&&!els.audio.paused)els.audio.pause();els.trajectoryHandleLayer.innerHTML='';playback.from=state.activeFormation;playback.to=nextFormationIndex(playback.from);playback.started=performance.now();playback.pausedAt=0;playback.previewOnly=true;playback.playing=true;els.trajectoryPreviewBtn.textContent='Ⅱ Probando';els.playIcon.textContent='Ⅱ';els.playStatus.textContent='Probando trayectoria';playback.frame=requestAnimationFrame(tickPlayback);
+    if(state.formations.length<2||playback.playing)return;clearDancerSelection(false);if(audioReady&&!els.audio.paused)els.audio.pause();els.trajectoryHandleLayer.innerHTML='';playback.from=state.activeFormation;playback.to=nextFormationIndex(playback.from);playback.started=performance.now();playback.pausedAt=0;playback.previewOnly=true;playback.playing=true;els.trajectoryPreviewBtn.textContent='Ⅱ Probando';els.playIcon.textContent='Ⅱ';els.playStatus.textContent='Probando trayectoria';renderDancers();playback.frame=requestAnimationFrame(tickPlayback);
   }
   function startDrag(event){
     if(playback.playing) stopPlayback(false);
-    event.preventDefault(); const node=event.currentTarget; node.setPointerCapture(event.pointerId); node.classList.add('dragging');
+    event.preventDefault();const node=event.currentTarget,id=node.dataset.id,multiKey=event.ctrlKey||event.metaKey;
+    if(multiKey){selectedDancerIds.has(id)?selectedDancerIds.delete(id):selectedDancerIds.add(id);updateDancerSelectionUI();return;}
+    if(!selectedDancerIds.has(id)){selectedDancerIds=new Set([id]);updateDancerSelectionUI();}
+    const ids=[...selectedDancerIds],formation=currentFormation(),initial=Object.fromEntries(ids.map(dancerId=>[dancerId,{...formation.positions[dancerId]}])),rect=els.stage.getBoundingClientRect(),startX=(event.clientX-rect.left)/rect.width*100,startY=(event.clientY-rect.top)/rect.height*100;
+    const minDx=Math.max(...ids.map(dancerId=>3-initial[dancerId].x)),maxDx=Math.min(...ids.map(dancerId=>97-initial[dancerId].x)),minDy=Math.max(...ids.map(dancerId=>5-initial[dancerId].y)),maxDy=Math.min(...ids.map(dancerId=>95-initial[dancerId].y));let moved=false;
+    node.setPointerCapture(event.pointerId);els.dancerLayer.querySelectorAll('.dancer-node.group-selected').forEach(item=>item.classList.add('dragging'));
     const move = e => {
-      const rect=els.stage.getBoundingClientRect(); const x=clamp((e.clientX-rect.left)/rect.width*100,3,97); const y=clamp((e.clientY-rect.top)/rect.height*100,5,95);
-      node.style.setProperty('--x',x); node.style.setProperty('--y',y); currentFormation().positions[node.dataset.id]={x,y};
+      const pointerX=(e.clientX-rect.left)/rect.width*100,pointerY=(e.clientY-rect.top)/rect.height*100,dx=clamp(pointerX-startX,minDx,maxDx),dy=clamp(pointerY-startY,minDy,maxDy);moved=moved||Math.abs(dx)>.02||Math.abs(dy)>.02;
+      ids.forEach(dancerId=>{const x=initial[dancerId].x+dx,y=initial[dancerId].y+dy;formation.positions[dancerId]={x,y};const item=els.dancerLayer.querySelector(`[data-id="${CSS.escape(dancerId)}"]`);if(item){item.style.setProperty('--x',x);item.style.setProperty('--y',y);}});
     };
-    const up = () => { const dancer=state.dancers.find(item=>item.id===node.dataset.id);node.classList.remove('dragging'); node.removeEventListener('pointermove',move); node.removeEventListener('pointerup',up); node.removeEventListener('pointercancel',up); saveState(null,`Movimiento de ${dancer?.name||'bailarín'}`); renderFormations(); };
+    const up = () => {els.dancerLayer.querySelectorAll('.dancer-node.dragging').forEach(item=>item.classList.remove('dragging'));node.removeEventListener('pointermove',move);node.removeEventListener('pointerup',up);node.removeEventListener('pointercancel',up);if(moved){const dancer=state.dancers.find(item=>item.id===id),label=ids.length===1?`Movimiento de ${dancer?.name||'bailarín'}`:`Movimiento de ${ids.length} bailarines`;saveState(null,label);renderFormations();}updateDancerSelectionUI();};
     node.addEventListener('pointermove',move); node.addEventListener('pointerup',up); node.addEventListener('pointercancel',up);
   }
   function keyboardMove(event){
     const vectors={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}; if(!vectors[event.key]) return;
-    event.preventDefault(); const step=event.shiftKey?5:1; const p=currentFormation().positions[event.currentTarget.dataset.id];
-    p.x=clamp(p.x+vectors[event.key][0]*step,3,97); p.y=clamp(p.y+vectors[event.key][1]*step,5,95); const dancer=state.dancers.find(item=>item.id===event.currentTarget.dataset.id);saveState(null,`Movimiento de ${dancer?.name||'bailarín'}`); renderDancers(); renderFormations();
+    event.preventDefault();const id=event.currentTarget.dataset.id;if(!selectedDancerIds.has(id))selectedDancerIds=new Set([id]);const ids=[...selectedDancerIds],formation=currentFormation(),step=event.shiftKey?5:1,wantedX=vectors[event.key][0]*step,wantedY=vectors[event.key][1]*step,minDx=Math.max(...ids.map(dancerId=>3-formation.positions[dancerId].x)),maxDx=Math.min(...ids.map(dancerId=>97-formation.positions[dancerId].x)),minDy=Math.max(...ids.map(dancerId=>5-formation.positions[dancerId].y)),maxDy=Math.min(...ids.map(dancerId=>95-formation.positions[dancerId].y)),dx=clamp(wantedX,minDx,maxDx),dy=clamp(wantedY,minDy,maxDy);
+    ids.forEach(dancerId=>{const p=formation.positions[dancerId];p.x+=dx;p.y+=dy;});const dancer=state.dancers.find(item=>item.id===id);saveState(null,ids.length===1?`Movimiento de ${dancer?.name||'bailarín'}`:`Movimiento de ${ids.length} bailarines`);renderDancers();renderFormations();
   }
   function renderDancerList(){
     els.dancerCount.textContent=state.dancers.length; els.dancerList.innerHTML='';
@@ -264,14 +287,14 @@
     });
   }
   function miniPreview(formation){
-    return state.dancers.map(d=>{ const p=formation.positions[d.id]; return p?`<i class="mini-dot" style="left:${p.x}%;top:${p.y}%;background:${d.color}"></i>`:''; }).join('');
+    return state.dancers.map(d=>{ const p=formation.positions[d.id],color=isDancerDimmed(formation,d.id)?'#aeb3bd':d.color; return p?`<i class="mini-dot${isDancerDimmed(formation,d.id)?' dimmed':''}" style="left:${p.x}%;top:${p.y}%;background:${color}"></i>`:''; }).join('');
   }
   function renderFormations(){
     els.formationCount.textContent=state.formations.length; els.formationsList.innerHTML='';
     state.formations.forEach((f,i)=>{
       const card=document.createElement('div'); card.className='formation-card'+(i===state.activeFormation?' active':''); card.tabIndex=0;
       card.innerHTML=`<span class="formation-number">${String(i+1).padStart(2,'0')}</span><div class="formation-preview">${miniPreview(f)}</div><div class="formation-meta"><strong>${escapeHtml(f.name)}</strong><small>${state.dancers.length} bailarines</small></div><div class="formation-cue"><label><span class="sr-only">Tiempo de entrada de ${escapeHtml(f.name)}</span><input class="cue-input" value="${formatTime(f.cue)}" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" title="Escribí 37 o 0:37" aria-label="Tiempo de entrada de ${escapeHtml(f.name)}. Escribí segundos como 37 o minutos y segundos como 0:37"></label><button class="mini-button mark" ${audioReady?'':'disabled'} aria-label="Marcar ${escapeHtml(f.name)} en el momento actual">◎ Marcar ahora</button></div><div class="formation-actions"><button class="mini-button up" aria-label="Mover arriba">↑</button><button class="mini-button down" aria-label="Mover abajo">↓</button><button class="mini-button rename" aria-label="Renombrar">✎</button><button class="mini-button danger delete" aria-label="Eliminar">×</button></div>`;
-      const select=()=>{ if(playback.playing) stopPlayback(false); state.activeFormation=i; saveState(null,null,false); renderAll(); };
+      const select=()=>{ if(playback.playing) stopPlayback(false);clearDancerSelection(false);state.activeFormation=i; saveState(null,null,false); renderAll(); };
       card.onclick=e=>{if(!e.target.closest('button,input,select,textarea,label,a'))select();};card.onkeydown=e=>{if(e.target===card&&(e.key==='Enter'||e.key===' ')){e.preventDefault();select();}};
       card.querySelector('.up').onclick=()=>moveFormation(i,-1); card.querySelector('.down').onclick=()=>moveFormation(i,1); card.querySelector('.rename').onclick=()=>renameFormation(i); card.querySelector('.delete').onclick=()=>deleteFormation(i);
       const cueInput=card.querySelector('.cue-input');cueInput.onfocus=e=>{const input=e.currentTarget;setTimeout(()=>input.select(),0);};cueInput.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();e.currentTarget.blur();}else if(e.key==='Escape'){e.currentTarget.value=formatTime(f.cue);e.currentTarget.blur();}};cueInput.onchange=e=>setCue(i,parseTime(e.target.value));
@@ -295,15 +318,15 @@
   }
   function deleteDancer(id){
     const d=state.dancers.find(x=>x.id===id); if(!d || !confirm(`¿Eliminar a ${d.name} de todas las formaciones?`)) return;
-    state.dancers=state.dancers.filter(x=>x.id!==id); state.formations.forEach(f=>delete f.positions[id]);Object.values(state.transitions||{}).forEach(targets=>Object.values(targets||{}).forEach(paths=>{if(paths&&typeof paths==='object')delete paths[id];})); saveState('Bailarín eliminado'); renderAll();
+    selectedDancerIds.delete(id);state.dancers=state.dancers.filter(x=>x.id!==id); state.formations.forEach(f=>{delete f.positions[id];if(Array.isArray(f.dimmedDancers))f.dimmedDancers=f.dimmedDancers.filter(dancerId=>dancerId!==id);});Object.values(state.transitions||{}).forEach(targets=>Object.values(targets||{}).forEach(paths=>{if(paths&&typeof paths==='object')delete paths[id];})); saveState('Bailarín eliminado'); renderAll();
   }
   function duplicateFormation(){
-    const source=currentFormation(); const next=state.formations[state.activeFormation+1]; const cue=next?(source.cue+next.cue)/2:source.cue+4; const copy={id:uid(),name:`${source.name} (copia)`,cue,positions:JSON.parse(JSON.stringify(source.positions))};
+    const source=currentFormation(); const next=state.formations[state.activeFormation+1]; const cue=next?(source.cue+next.cue)/2:source.cue+4; const copy={id:uid(),name:`${source.name} (copia)`,cue,positions:JSON.parse(JSON.stringify(source.positions)),dimmedDancers:[...(source.dimmedDancers||[])]};
     state.formations.splice(state.activeFormation+1,0,copy); state.activeFormation++; saveState('Formación duplicada'); renderAll();
   }
   function newFormation(){
     const positions={}; state.dancers.forEach((d,i)=>positions[d.id]={x:15+(i%5)*17,y:30+Math.floor(i/5)*28});
-    const last=state.formations[state.formations.length-1]; state.formations.push({id:uid(),name:`Formación ${state.formations.length+1}`,cue:(last?.cue||0)+8,positions}); state.activeFormation=state.formations.length-1; saveState('Nueva formación creada'); renderAll();
+    const last=state.formations[state.formations.length-1]; state.formations.push({id:uid(),name:`Formación ${state.formations.length+1}`,cue:(last?.cue||0)+8,positions,dimmedDancers:[]});clearDancerSelection(false);state.activeFormation=state.formations.length-1; saveState('Nueva formación creada'); renderAll();
   }
   function moveFormation(i,delta){ const ni=i+delta;if(ni<0||ni>=state.formations.length)return;[state.formations[i],state.formations[ni]]=[state.formations[ni],state.formations[i]];state.activeFormation=ni;normalizeCues();saveState('Secuencia reordenada');renderAll(); }
   function renameFormation(i){ const name=prompt('Nombre de la formación:',state.formations[i].name);if(name?.trim()){state.formations[i].name=name.trim().slice(0,40);saveState(null,'Formación renombrada');renderAll();} }
@@ -329,7 +352,7 @@
   }
   function togglePlayback(){ if(audioReady){toggleAudio();return;} if(state.formations.length<2){showToast('Agregá otra formación para animar');return;} playback.playing?pausePlayback():startPlayback(); }
   function startPlaybackFrom(index){
-    if(!state.formations.length)return;const startIndex=clamp(Math.round(Number(index)||0),0,state.formations.length-1),formation=state.formations[startIndex];
+    if(!state.formations.length)return;clearDancerSelection(false);const startIndex=clamp(Math.round(Number(index)||0),0,state.formations.length-1),formation=state.formations[startIndex];
     if(trajectoryEditing){trajectoryEditing=false;renderTrajectoryEditor();}cancelAnimationFrame(playback.frame);playback.playing=false;playback.previewOnly=false;playback.pausedAt=0;state.activeFormation=startIndex;renderFormations();renderTrajectoryEditor();updatePlaybackLabels();
     if(audioReady){
       if(!els.audio.paused)els.audio.pause();const duration=Number.isFinite(els.audio.duration)?Math.max(0,els.audio.duration-.01):Infinity,target=clamp(Number(formation.cue)||0,0,duration);els.audio.currentTime=target;updateAudioTime();syncFromAudio(target);
@@ -460,7 +483,7 @@
     const {data,error}=await cloudClient.from('choreographies').select('id,name,data,audio_path,audio_name,updated_at').eq('id',id).single();
     if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos abrir esta coreografía.');els.cloudLibraryMessage.classList.add('error');return;}
     try{
-      cloudHydrating=true;selectedAudioFile=null;state=importedProject(data.data);state.routineName=cleanText(data.name,state.routineName,60);state.musicName=cleanText(data.audio_name,state.musicName||'',120);activeCloudId=data.id;activeAudioPath=data.audio_path||state.musicPath||null;state.musicPath=activeAudioPath||'';localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));clearAudioPlayer();resetHistory('Coreografía abierta');renderAll();await loadCloudAudio(activeAudioPath,state.musicName);setSaveStatus('Guardado en la nube');
+      cloudHydrating=true;selectedAudioFile=null;clearDancerSelection(false);state=importedProject(data.data);state.routineName=cleanText(data.name,state.routineName,60);state.musicName=cleanText(data.audio_name,state.musicName||'',120);activeCloudId=data.id;activeAudioPath=data.audio_path||state.musicPath||null;state.musicPath=activeAudioPath||'';localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));clearAudioPlayer();resetHistory('Coreografía abierta');renderAll();await loadCloudAudio(activeAudioPath,state.musicName);setSaveStatus('Guardado en la nube');
       await refreshCloudList();if(closeDialog)els.cloudDialog.close();showToast(`Abriste “${state.routineName}”`);
     }catch{els.cloudLibraryMessage.textContent='Esta coreografía tiene datos que no pudimos leer.';els.cloudLibraryMessage.classList.add('error');}
     finally{cloudHydrating=false;}
@@ -473,7 +496,7 @@
     const draft=freshState();draft.routineName=nextCloudName();els.cloudLibraryMessage.textContent='Creando coreografía…';
     const {data,error}=await cloudClient.from('choreographies').insert({user_id:cloudSession.user.id,name:draft.routineName,data:draft}).select('id,name,created_at,updated_at').single();
     if(error){els.cloudLibraryMessage.textContent=cloudErrorMessage(error,'No pudimos crear la coreografía.');els.cloudLibraryMessage.classList.add('error');return;}
-    cloudHydrating=true;clearAudioPlayer();selectedAudioFile=null;activeAudioPath=null;state=draft;state.musicPath='';activeCloudId=data.id;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));resetHistory('Coreografía creada');renderAll();cloudHydrating=false;await refreshCloudList();setSaveStatus('Guardado en la nube');els.cloudDialog.close();showToast(`${draft.routineName} creada`);
+    cloudHydrating=true;clearAudioPlayer();selectedAudioFile=null;activeAudioPath=null;clearDancerSelection(false);state=draft;state.musicPath='';activeCloudId=data.id;localStorage.setItem(ACTIVE_CLOUD_KEY,activeCloudId);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));resetHistory('Coreografía creada');renderAll();cloudHydrating=false;await refreshCloudList();setSaveStatus('Guardado en la nube');els.cloudDialog.close();showToast(`${draft.routineName} creada`);
   }
   async function uploadCurrentRoutine(){
     if(!cloudClient||!cloudSession)return;
@@ -589,7 +612,8 @@
         positions[d.id]={x:clamp(Number(raw?.x)||50,3,97),y:clamp(Number(raw?.y)||50,5,95)};
       });
       let id=String(f.id||uid()).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,64)||uid();while(usedFormationIds.has(id))id=uid();usedFormationIds.add(id);
-      const cue=Number(f.cue); return {id,name:cleanText(f.name,`Formación ${formationIndex+1}`,40),cue:Number.isFinite(cue)?clamp(cue,0,86400):formationIndex*8,positions};
+      const dimmedDancers=Array.isArray(f.dimmedDancers)?f.dimmedDancers.map(sourceId=>{const dancerIndex=sourceDancers.findIndex(candidate=>String(candidate.id??'')===String(sourceId));return dancerIndex>=0?dancers[dancerIndex]?.id:null;}).filter(Boolean):[];
+      const cue=Number(f.cue); return {id,name:cleanText(f.name,`Formación ${formationIndex+1}`,40),cue:Number.isFinite(cue)?clamp(cue,0,86400):formationIndex*8,positions,dimmedDancers:[...new Set(dimmedDancers)]};
     });
     if(!formations.length)throw new Error('El proyecto necesita al menos una formación.');
     const transitions={};const sourceTransitions=source.transitions&&typeof source.transitions==='object'?source.transitions:{};
@@ -603,7 +627,7 @@
       if(file.size>5*1024*1024)throw new Error('El archivo es demasiado grande. El máximo es 5 MB.');
       const next=importedProject(JSON.parse(await file.text()));
       if(!confirm(`Abrir “${next.routineName}” reemplazará la rutina actual en este dispositivo. ¿Continuar?`))return;
-      stopPlayback(false);clearAudioPlayer();selectedAudioFile=null;activeAudioPath=null;
+      stopPlayback(false);clearAudioPlayer();selectedAudioFile=null;activeAudioPath=null;clearDancerSelection(false);
       activeCloudId=null;localStorage.removeItem(ACTIVE_CLOUD_KEY);state=next;saveState(null,'Proyecto abierto');renderAll();showToast('Proyecto abierto y guardado');
     } catch(error){ showToast(error instanceof Error?error.message:'No pudimos abrir este proyecto.'); }
     finally { input.value=''; }
@@ -611,14 +635,14 @@
   function csvCell(value){ return `"${String(value??'').replace(/"/g,'""')}"`; }
   function exportCsv(){
     const frontLabels={top:'Arriba',bottom:'Abajo',left:'Izquierda',right:'Derecha'};
-    const rows=[['Rutina','Formación','Orden','Tiempo','Bailarín','Color','X (%)','Y (%)','Frente','Filas','Columnas']];
-    state.formations.forEach((formation,index)=>state.dancers.forEach(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50};rows.push([state.routineName,formation.name,index+1,formatTime(formation.cue),dancer.name,dancer.color,Number(position.x).toFixed(2),Number(position.y).toFixed(2),frontLabels[state.frontSide],state.rows,state.cols]);}));
+    const rows=[['Rutina','Formación','Orden','Tiempo','Bailarín','Color','Estado visual','X (%)','Y (%)','Frente','Filas','Columnas']];
+    state.formations.forEach((formation,index)=>state.dancers.forEach(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50};rows.push([state.routineName,formation.name,index+1,formatTime(formation.cue),dancer.name,dancer.color,isDancerDimmed(formation,dancer.id)?'Gris':'Color',Number(position.x).toFixed(2),Number(position.y).toFixed(2),frontLabels[state.frontSide],state.rows,state.cols]);}));
     const csv='\ufeff'+rows.map(row=>row.map(csvCell).join(',')).join('\r\n');downloadFile(`${fileSlug(state.routineName)}-posiciones.csv`,csv,'text/csv;charset=utf-8');showToast('CSV guardado en Descargas');
   }
   function formationSvg(formation,index){
     const x=42,y=58,w=816,h=408; const vertical=Array.from({length:state.cols+1},(_,i)=>`<line x1="${x+i*w/state.cols}" y1="${y}" x2="${x+i*w/state.cols}" y2="${y+h}"/>`).join('');
     const horizontal=Array.from({length:state.rows+1},(_,i)=>`<line x1="${x}" y1="${y+i*h/state.rows}" x2="${x+w}" y2="${y+i*h/state.rows}"/>`).join('');
-    const dots=state.dancers.map(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50};const cx=x+clamp(Number(position.x)||50,3,97)/100*w;const cy=y+clamp(Number(position.y)||50,5,95)/100*h;return `<g><circle cx="${cx}" cy="${cy}" r="16" fill="${dancer.color}" stroke="#fff" stroke-width="3"/><text class="initial" x="${cx}" y="${cy+4}">${escapeHtml(initials(dancer.name))}</text><text class="name" x="${cx}" y="${cy+31}">${escapeHtml(dancer.name)}</text></g>`;}).join('');
+    const dots=state.dancers.map(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50};const cx=x+clamp(Number(position.x)||50,3,97)/100*w;const cy=y+clamp(Number(position.y)||50,5,95)/100*h,color=isDancerDimmed(formation,dancer.id)?'#aeb3bd':dancer.color;return `<g><circle cx="${cx}" cy="${cy}" r="16" fill="${color}" stroke="#fff" stroke-width="3"/><text class="initial" x="${cx}" y="${cy+4}">${escapeHtml(initials(dancer.name))}</text><text class="name" x="${cx}" y="${cy+31}">${escapeHtml(dancer.name)}</text></g>`;}).join('');
     const frontLabels={top:'↑ ARRIBA',bottom:'↓ ABAJO',left:'← IZQUIERDA',right:'DERECHA →'};
     return `<article><header><div><span>FORMACIÓN ${String(index+1).padStart(2,'0')}</span><h2>${escapeHtml(formation.name)}</h2></div><strong>${escapeHtml(formatTime(formation.cue))}</strong></header><svg viewBox="0 0 900 520" role="img" aria-label="${escapeHtml(formation.name)}"><rect class="stage-bg" x="${x}" y="${y}" width="${w}" height="${h}"/><g class="grid">${vertical}${horizontal}</g><line class="center" x1="450" y1="${y}" x2="450" y2="${y+h}"/><text class="front" x="450" y="500">FRENTE: ${frontLabels[state.frontSide]}</text>${dots}</svg></article>`;
   }
@@ -631,6 +655,7 @@
   $('addDancerBtn').onclick=$('addDancerSecondary').onclick=()=>openDancerDialog();
   $('duplicateBtn').onclick=$('duplicateTopBtn').onclick=duplicateFormation; $('newFormationBtn').onclick=newFormation;
   els.trajectoryDancer.onchange=e=>selectTrajectoryDancer(e.target.value);els.trajectoryEditBtn.onclick=toggleTrajectoryEditing;els.trajectoryResetBtn.onclick=resetSelectedTrajectory;els.trajectoryPreviewBtn.onclick=previewCurrentTransition;
+  els.toggleDancerDimBtn.onclick=toggleSelectedDancersDimmed;els.clearDancerSelectionBtn.onclick=()=>clearDancerSelection();els.stage.addEventListener('pointerdown',event=>{if(!trajectoryEditing&&!event.target.closest('.dancer-node'))clearDancerSelection();});
   $('exportProjectBtn').onclick=exportProject;$('importProjectInput').onchange=importProjectFile;$('exportCsvBtn').onclick=exportCsv;$('exportSheetsBtn').onclick=exportSheets;
   $('cloudLibraryBtn').onclick=()=>{renderCloudViews();renderCloudList();els.cloudDialog.showModal();if(cloudSession)refreshCloudList();};
   $('closeCloudDialog').onclick=()=>els.cloudDialog.close();$('cloudLoginForm').onsubmit=handleCloudLogin;
@@ -646,7 +671,7 @@
   els.frontSide.onchange=e=>{state.frontSide=e.target.value;saveState('Frente del escenario actualizado');renderFront();};
   els.audioInput.onchange=handleAudioFile;els.audioPlay.onclick=toggleAudio;els.audioSeek.oninput=e=>{if(audioReady){els.audio.currentTime=Number(e.target.value);updateAudioTime();syncFromAudio(els.audio.currentTime);}};
   els.audio.onloadedmetadata=()=>{normalizeCues();saveState(null,'Tiempos ajustados');updateAudioTime();renderFormations();};
-  els.audio.onplay=()=>{playback.playing=false;playback.previewOnly=false;cancelAnimationFrame(playback.frame);els.trajectoryPreviewBtn.textContent='▶ Probar';if(trajectoryEditing){trajectoryEditing=false;renderTrajectoryEditor();}els.audioPlay.textContent='Ⅱ';els.playIcon.textContent='Ⅱ';els.playStatus.textContent='Sincronizando con la música';cancelAnimationFrame(audioFrame);audioFrame=requestAnimationFrame(tickAudio);};
+  els.audio.onplay=()=>{playback.playing=false;playback.previewOnly=false;cancelAnimationFrame(playback.frame);clearDancerSelection(false);els.trajectoryPreviewBtn.textContent='▶ Probar';if(trajectoryEditing)trajectoryEditing=false;renderDancers();renderTrajectoryEditor();els.audioPlay.textContent='Ⅱ';els.playIcon.textContent='Ⅱ';els.playStatus.textContent='Sincronizando con la música';cancelAnimationFrame(audioFrame);audioFrame=requestAnimationFrame(tickAudio);};
   els.audio.onpause=()=>{els.audioPlay.textContent='▶';els.playIcon.textContent='▶';if(audioReady&&!els.audio.ended)els.playStatus.textContent='Música en pausa';cancelAnimationFrame(audioFrame);updateAudioTime();syncFromAudio(els.audio.currentTime);};
   els.audio.onended=()=>{els.playStatus.textContent='Fin de la canción';els.audioPlay.textContent='▶';els.playIcon.textContent='▶';};
   document.querySelectorAll('.mobile-tabs button').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.mobile-tabs button').forEach(b=>b.classList.toggle('active',b===btn));document.querySelectorAll('.workspace > aside, .stage-workspace').forEach(p=>p.classList.toggle('mobile-active',p.classList.contains(btn.dataset.panel)));});
@@ -654,7 +679,7 @@
   els.undoBtn.onclick=undoHistory;els.redoBtn.onclick=redoHistory;els.historyBtn.onclick=()=>setHistoryOpen(!els.historyDrawer.classList.contains('open'));$('closeHistoryBtn').onclick=()=>setHistoryOpen(false);els.historyBackdrop.onclick=()=>setHistoryOpen(false);
   document.addEventListener('keydown',event=>{
     const editing=event.target.matches?.('input, textarea, select, [contenteditable="true"]');
-    if(event.key==='Escape'&&els.historyDrawer.classList.contains('open')){setHistoryOpen(false);return;}
+    if(event.key==='Escape'&&els.historyDrawer.classList.contains('open')){setHistoryOpen(false);return;}if(event.key==='Escape'&&selectedDancerIds.size&&!editing){clearDancerSelection();return;}
     if(editing||!(event.ctrlKey||event.metaKey))return;
     if(event.key.toLowerCase()==='z'){event.preventDefault();event.shiftKey?redoHistory():undoHistory();}
     else if(event.key.toLowerCase()==='y'){event.preventDefault();redoHistory();}

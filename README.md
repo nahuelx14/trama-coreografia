@@ -8,6 +8,8 @@ Aplicación pública: <https://nahuelx14.github.io/trama-coreografia/>
 
 - Escenario con cuadrícula editable y frente configurable arriba, abajo, a la izquierda o a la derecha.
 - Bailarines identificados por nombre y color, movibles con mouse, tacto o teclado.
+- Selección múltiple con `Ctrl + clic` para mover varios bailarines conservando su disposición.
+- Estado visual gris por bailarín y por formación para representar poses o acciones diferentes.
 - Alta, edición y eliminación de bailarines.
 - Creación, duplicado, renombrado, reordenamiento y eliminación de formaciones.
 - Reproducción animada de la secuencia con tres velocidades.

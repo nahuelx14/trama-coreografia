@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f2eb">
   <meta name="description" content="Diseñá, ordená y animá formaciones coreográficas.">
   <title>Trama — Diseñador coreográfico</title>
-  <link rel="stylesheet" href="styles.css?v=20261014-cues-audio">
+  <link rel="stylesheet" href="styles.css?v=20261015-group-select">
 </head>
 <body>
   <div class="app-shell">
@@ -72,7 +72,14 @@
           </div>
           <div class="stage-front" id="stageFront" aria-label="Frente del escenario"><span>FRENTE DEL ESCENARIO</span><i id="frontArrow">→</i></div>
         </div>
-        <div class="stage-footnote"><span><kbd>Arrastrá</kbd> para mover</span><span>Las posiciones se guardan automáticamente</span></div>
+        <div class="stage-footnote"><span><kbd>Ctrl</kbd> + clic para seleccionar varios</span><span>Las posiciones se guardan automáticamente</span></div>
+        <div class="selection-toolbar" id="selectionToolbar" hidden aria-live="polite">
+          <div class="selection-copy"><span class="eyebrow">SELECCIÓN</span><strong id="selectionCount">1 bailarín seleccionado</strong><small id="selectionHint">Arrastralo para moverlo.</small></div>
+          <div class="selection-actions">
+            <button id="toggleDancerDimBtn" type="button"><span aria-hidden="true">◐</span><span id="toggleDancerDimLabel">Marcar en gris</span></button>
+            <button id="clearDancerSelectionBtn" type="button">Quitar selección</button>
+          </div>
+        </div>
 
         <section class="trajectory-card" id="trajectoryCard" aria-label="Trayectoria entre formaciones">
           <div class="trajectory-copy">
@@ -251,6 +258,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20261014-cues-audio"></script>
+  <script src="app.js?v=20261015-group-select"></script>
 </body>
 </html>

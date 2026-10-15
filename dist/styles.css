@@ -116,11 +116,25 @@ h2 span { font-family: Inter, sans-serif; font-size: 10px; color: white; backgro
 .dancer-node:hover .node-dot, .dancer-node:focus-visible .node-dot { transform: scale(1.1); box-shadow: 0 6px 16px rgba(20,20,30,.27), 0 0 0 3px color-mix(in srgb, var(--color) 32%, white); }
 .dancer-node .node-label { margin-top: 3px; background: rgba(255,255,255,.9); color: var(--ink); padding: 2px 5px; border-radius: 4px; font-size: 9px; font-weight: 800; box-shadow: 0 2px 5px rgba(0,0,0,.08); max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dancer-node.dragging .node-dot { transform: scale(1.17); }
+.dancer-node.group-selected .node-dot { transform: scale(1.1); box-shadow: 0 6px 16px rgba(20,20,30,.27), 0 0 0 4px rgba(32,42,68,.28), 0 0 0 6px white; }
+.dancer-node.dimmed .node-dot { background: #aeb3bd; color: white; box-shadow: 0 4px 12px rgba(50,55,65,.2), 0 0 0 1px #7e8591; }
+.dancer-node.dimmed .node-label { color: #68707d; }
+.dancer-node.dimmed.group-selected .node-dot { box-shadow: 0 6px 16px rgba(50,55,65,.24), 0 0 0 4px rgba(32,42,68,.3), 0 0 0 6px white; }
 .stage.trajectory-editing .dancer-node { cursor: pointer; }
 .stage.trajectory-editing .dancer-node:not(.trajectory-selected) { opacity: .55; }
 .dancer-node.trajectory-selected .node-dot { transform: scale(1.13); box-shadow: 0 6px 16px rgba(20,20,30,.27), 0 0 0 4px rgba(255,91,91,.32); }
 .stage-footnote { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; padding: 9px 0 0; }
 kbd { font-family: inherit; background: white; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 4px; }
+.selection-toolbar { margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 13px; border: 1px solid rgba(32,42,68,.22); border-radius: 11px; background: rgba(255,255,255,.92); box-shadow: 0 8px 22px rgba(32,42,68,.08); }
+.selection-toolbar[hidden] { display: none; }
+.selection-copy { min-width: 0; display: flex; flex-direction: column; }
+.selection-copy strong { margin-top: 2px; color: var(--navy); font-size: 12px; }
+.selection-copy small { margin-top: 2px; color: var(--muted); font-size: 9px; }
+.selection-actions { display: flex; gap: 7px; }
+.selection-actions button { min-height: 34px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--navy); padding: 8px 10px; cursor: pointer; font-size: 9px; font-weight: 850; white-space: nowrap; }
+.selection-actions button:first-child { display: flex; align-items: center; justify-content: center; gap: 5px; border-color: #9ca2ad; background: #f1f2f4; }
+.selection-actions button:first-child.restore { border-color: var(--accent); background: #fff0f0; color: var(--accent-dark); }
+.selection-actions button:hover { border-color: var(--navy); }
 .trajectory-card { margin-top: 14px; display: grid; grid-template-columns: minmax(190px,1fr) minmax(130px,.55fr) auto; align-items: center; gap: 12px; padding: 13px 15px; border: 1px solid #e7d4b0; border-radius: 13px; background: linear-gradient(135deg,rgba(255,249,232,.96),rgba(255,253,249,.96)); box-shadow: 0 8px 24px rgba(34,38,50,.05); }
 .trajectory-copy { display: flex; flex-direction: column; min-width: 0; }
 .trajectory-copy strong { margin-top: 2px; overflow: hidden; color: var(--ink); font-family: Georgia,serif; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
@@ -331,6 +345,8 @@ legend { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; font-
   .stage { min-height: 0; aspect-ratio: 1.35; }
   .stage-front { font-size: 8px; }
   .stage-footnote span:last-child { display: none; }
+  .selection-toolbar { align-items: stretch; flex-direction: column; gap: 9px; }
+  .selection-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .trajectory-card { grid-template-columns: 1fr; gap: 10px; }
   .trajectory-actions { grid-column: auto; display: grid; grid-template-columns: 1.4fr .8fr .8fr; }
   .trajectory-actions button { min-width: 0; padding-left: 7px; padding-right: 7px; }
