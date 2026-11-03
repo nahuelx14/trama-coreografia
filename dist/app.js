@@ -10,6 +10,11 @@
   const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
   const cloudClient = window.supabase?.createClient ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY) : null;
   const palette = ['#ff5b5b','#ff9f43','#f4cd3a','#5cc78b','#35a7a0','#4d8fe6','#6c63d9','#a45ed0','#ef6da8','#795548','#1f2937','#9ba2aa'];
+  const facingOptions = {
+    n:{label:'arriba',angle:0},ne:{label:'arriba a la derecha',angle:45},e:{label:'derecha',angle:90},se:{label:'abajo a la derecha',angle:135},
+    s:{label:'abajo',angle:180},sw:{label:'abajo a la izquierda',angle:225},w:{label:'izquierda',angle:270},nw:{label:'arriba a la izquierda',angle:315}
+  };
+  const frontFacings = {top:'n',bottom:'s',left:'w',right:'e'};
   const defaultDancers = [
     ['d1','Malena','#ff5b5b'],['d2','Juli','#ff9f43'],['d3','Cata','#f4cd3a'],['d4','Lola','#5cc78b'],['d5','Paz','#35a7a0'],
     ['d6','Emi','#4d8fe6'],['d7','Mora','#6c63d9'],['d8','Sofi','#a45ed0'],['d9','Tizi','#ef6da8'],['d10','Vale','#795548']
@@ -18,10 +23,11 @@
   const positionsB = [[12,50],[22,37],[32,50],[42,37],[52,50],[62,37],[72,50],[82,37],[42,72],[62,72]];
   const positionsC = [[50,13],[36,28],[64,28],[24,46],[76,46],[15,68],[34,68],[50,80],[66,68],[85,68]];
   const toMap = values => Object.fromEntries(defaultDancers.map((d,i) => [d.id,{x:values[i][0],y:values[i][1]}]));
+  const toFacings = (direction='e') => Object.fromEntries(defaultDancers.map(d => [d.id,direction]));
   const freshState = () => ({ routineName:'Nueva coreografía', rows:6, cols:9, frontSide:'right', musicName:'', musicPath:'', dancers:defaultDancers, formations:[
-    {id:uid(),name:'Entrada',cue:0,positions:toMap(positionsA),dimmedDancers:[]},
-    {id:uid(),name:'Diagonal',cue:8,positions:toMap(positionsB),dimmedDancers:[]},
-    {id:uid(),name:'Cierre',cue:16,positions:toMap(positionsC),dimmedDancers:[]}
+    {id:uid(),name:'Entrada',cue:0,positions:toMap(positionsA),dimmedDancers:[],facings:toFacings()},
+    {id:uid(),name:'Diagonal',cue:8,positions:toMap(positionsB),dimmedDancers:[],facings:toFacings()},
+    {id:uid(),name:'Cierre',cue:16,positions:toMap(positionsC),dimmedDancers:[],facings:toFacings()}
   ], transitions:{}, activeFormation:0, speed:950 });
   let state = loadState();
   let editingDancerId = null;
@@ -60,7 +66,7 @@
     cloudPasswordRecovery:$('cloudPasswordRecovery'), recoveryPassword:$('recoveryPassword'), recoveryPasswordConfirm:$('recoveryPasswordConfirm'), recoveryMessage:$('recoveryMessage'), shareCodeInput:$('shareCodeInput'),
     trajectoryTitle:$('trajectoryTitle'), trajectoryHint:$('trajectoryHint'), trajectoryDancer:$('trajectoryDancer'), trajectoryEditBtn:$('trajectoryEditBtn'), trajectoryResetBtn:$('trajectoryResetBtn'), trajectoryPreviewBtn:$('trajectoryPreviewBtn'),
     undoBtn:$('undoBtn'), redoBtn:$('redoBtn'), historyBtn:$('historyBtn'), historyDrawer:$('historyDrawer'), historyBackdrop:$('historyBackdrop'), historyList:$('historyList'), historyStatus:$('historyStatus'),
-    selectionToolbar:$('selectionToolbar'), selectionCount:$('selectionCount'), selectionHint:$('selectionHint'), toggleDancerDimBtn:$('toggleDancerDimBtn'), toggleDancerDimLabel:$('toggleDancerDimLabel'), clearDancerSelectionBtn:$('clearDancerSelectionBtn')
+    selectionToolbar:$('selectionToolbar'), selectionCount:$('selectionCount'), selectionHint:$('selectionHint'), facingSelect:$('facingSelect'), toggleDancerDimBtn:$('toggleDancerDimBtn'), toggleDancerDimLabel:$('toggleDancerDimLabel'), clearDancerSelectionBtn:$('clearDancerSelectionBtn')
   };
 
   function uid(){ return 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -133,6 +139,9 @@
   function ensurePositions(formation){
     state.dancers.forEach((d,i)=>{ if(!formation.positions[d.id]) formation.positions[d.id] = {x:20+(i%5)*15,y:30+Math.floor(i/5)*25}; });
     formation.dimmedDancers=Array.isArray(formation.dimmedDancers)?formation.dimmedDancers.filter(id=>state.dancers.some(dancer=>dancer.id===id)):[];
+    if(!formation.facings||typeof formation.facings!=='object')formation.facings={};
+    state.dancers.forEach(dancer=>{if(!facingOptions[formation.facings[dancer.id]])formation.facings[dancer.id]=frontFacings[state.frontSide]||'e';});
+    Object.keys(formation.facings).forEach(id=>{if(!state.dancers.some(dancer=>dancer.id===id))delete formation.facings[id];});
   }
   function nextFormationIndex(index){ return state.formations.length<2?index:(index+1)%state.formations.length; }
   function transitionMap(fromIndex,toIndex,create=false){
@@ -190,28 +199,34 @@
     els.fileButtonText.textContent=state.musicName?'Cambiar MP3':'Elegir MP3';
   }
   function isDancerDimmed(formation,dancerId){return Array.isArray(formation?.dimmedDancers)&&formation.dimmedDancers.includes(dancerId);}
+  function dancerFacing(formation,dancerId){const value=formation?.facings?.[dancerId];return facingOptions[value]?value:(frontFacings[state.frontSide]||'e');}
   function updateDancerSelectionUI(){
     selectedDancerIds=new Set([...selectedDancerIds].filter(id=>state.dancers.some(dancer=>dancer.id===id)));
     els.dancerLayer.querySelectorAll('.dancer-node').forEach(node=>{const selected=!trajectoryEditing&&selectedDancerIds.has(node.dataset.id);node.classList.toggle('group-selected',selected);node.setAttribute('aria-pressed',String(selected));});
     const count=trajectoryEditing?0:selectedDancerIds.size;els.selectionToolbar.hidden=!count;if(!count)return;
     els.selectionCount.textContent=`${count} ${count===1?'bailarín seleccionado':'bailarines seleccionados'}`;els.selectionHint.textContent=count===1?'Arrastralo para moverlo. Ctrl + clic suma otros.':`Arrastrá cualquiera para mover los ${count} juntos.`;
     const dimmed=selectedDancerIds.size>0&&[...selectedDancerIds].every(id=>isDancerDimmed(currentFormation(),id));els.toggleDancerDimLabel.textContent=dimmed?'Restaurar color':'Marcar en gris';els.toggleDancerDimBtn.classList.toggle('restore',dimmed);
+    const directions=new Set([...selectedDancerIds].map(id=>dancerFacing(currentFormation(),id)));els.facingSelect.value=directions.size===1?[...directions][0]:'';
   }
   function clearDancerSelection(update=true){selectedDancerIds.clear();if(update)updateDancerSelectionUI();}
   function toggleSelectedDancersDimmed(){
     if(!selectedDancerIds.size||trajectoryEditing)return;const formation=currentFormation(),current=new Set(formation.dimmedDancers||[]),allDimmed=[...selectedDancerIds].every(id=>current.has(id));
     selectedDancerIds.forEach(id=>allDimmed?current.delete(id):current.add(id));formation.dimmedDancers=[...current];const count=selectedDancerIds.size,message=allDimmed?(count===1?'Color restaurado':'Colores restaurados'):(count===1?'Bailarín marcado en gris':`${count} bailarines marcados en gris`);saveState(message,allDimmed?'Color de bailarín restaurado':'Estado gris de bailarín actualizado');renderDancers();renderFormations();
   }
+  function setSelectedDancersFacing(direction){
+    if(!selectedDancerIds.size||trajectoryEditing||!facingOptions[direction])return;const formation=currentFormation();formation.facings??={};selectedDancerIds.forEach(id=>formation.facings[id]=direction);
+    const count=selectedDancerIds.size,label=facingOptions[direction].label;saveState(`${count===1?'Mirada actualizada':`Mirada de ${count} bailarines actualizada`}: ${label}`,count===1?'Dirección del bailarín actualizada':'Dirección grupal actualizada');renderDancers();renderFormations();
+  }
   function renderDancers(displayPositions){
     const positions = displayPositions || currentFormation().positions;
     els.dancerLayer.innerHTML = '';
     state.dancers.forEach(dancer => {
       const pos = positions[dancer.id] || {x:50,y:50};
-      const dimmed=isDancerDimmed(currentFormation(),dancer.id);const selected=!trajectoryEditing&&selectedDancerIds.has(dancer.id);
+      const dimmed=isDancerDimmed(currentFormation(),dancer.id),facing=dancerFacing(currentFormation(),dancer.id),facingMeta=facingOptions[facing];const selected=!trajectoryEditing&&selectedDancerIds.has(dancer.id);
       const node = document.createElement('button'); node.type='button'; node.className=`dancer-node${trajectoryEditing&&dancer.id===selectedTrajectoryDancerId?' trajectory-selected':''}${selected?' group-selected':''}${dimmed?' dimmed':''}`; node.dataset.id=dancer.id;
-      node.style.setProperty('--x',pos.x); node.style.setProperty('--y',pos.y); node.style.setProperty('--color',dancer.color);
-      node.setAttribute('aria-pressed',String(selected));node.setAttribute('aria-label',trajectoryEditing?`Editar trayectoria de ${dancer.name}`:`${dancer.name}${dimmed?', marcado en gris':''}. Posición ${Math.round(pos.x)}, ${Math.round(pos.y)}. Arrastrar para mover. Control más clic para seleccionar varios.`);
-      node.innerHTML = `<span class="node-dot">${escapeHtml(initials(dancer.name))}</span><span class="node-label">${escapeHtml(dancer.name)}</span>`;
+      node.style.setProperty('--x',pos.x); node.style.setProperty('--y',pos.y); node.style.setProperty('--color',dancer.color);node.style.setProperty('--facing-angle',`${facingMeta.angle}deg`);
+      node.setAttribute('aria-pressed',String(selected));node.setAttribute('aria-label',trajectoryEditing?`Editar trayectoria de ${dancer.name}`:`${dancer.name}${dimmed?', marcado en gris':''}. Mira hacia ${facingMeta.label}. Posición ${Math.round(pos.x)}, ${Math.round(pos.y)}. Arrastrar para mover. Control más clic para seleccionar varios.`);
+      node.innerHTML = `<span class="node-dot"><span class="node-initial">${escapeHtml(initials(dancer.name))}</span><span class="node-facing" aria-hidden="true">↑</span></span><span class="node-label">${escapeHtml(dancer.name)}</span>`;
       if(trajectoryEditing)node.addEventListener('click',()=>selectTrajectoryDancer(dancer.id));else{node.addEventListener('pointerdown', startDrag);node.addEventListener('keydown', keyboardMove);}
       els.dancerLayer.appendChild(node);
     });
@@ -313,20 +328,20 @@
   function submitDancer(event){
     event.preventDefault(); const name=els.dancerName.value.trim(); if(!name){els.dancerName.focus();return;}
     if(editingDancerId){ const d=state.dancers.find(x=>x.id===editingDancerId); d.name=name; d.color=selectedColor; showToast('Bailarín actualizado'); }
-    else { const id=uid(); state.dancers.push({id,name,color:selectedColor}); state.formations.forEach((f,i)=>{f.positions[id]={x:18+(state.dancers.length*11+i*5)%65,y:24+(state.dancers.length*17+i*7)%55};}); showToast('Bailarín agregado'); }
+    else { const id=uid(); state.dancers.push({id,name,color:selectedColor}); state.formations.forEach((f,i)=>{f.positions[id]={x:18+(state.dancers.length*11+i*5)%65,y:24+(state.dancers.length*17+i*7)%55};f.facings??={};f.facings[id]=frontFacings[state.frontSide]||'e';}); showToast('Bailarín agregado'); }
     saveState(null,editingDancerId?'Bailarín actualizado':'Bailarín agregado'); els.dialog.close(); renderAll();
   }
   function deleteDancer(id){
     const d=state.dancers.find(x=>x.id===id); if(!d || !confirm(`¿Eliminar a ${d.name} de todas las formaciones?`)) return;
-    selectedDancerIds.delete(id);state.dancers=state.dancers.filter(x=>x.id!==id); state.formations.forEach(f=>{delete f.positions[id];if(Array.isArray(f.dimmedDancers))f.dimmedDancers=f.dimmedDancers.filter(dancerId=>dancerId!==id);});Object.values(state.transitions||{}).forEach(targets=>Object.values(targets||{}).forEach(paths=>{if(paths&&typeof paths==='object')delete paths[id];})); saveState('Bailarín eliminado'); renderAll();
+    selectedDancerIds.delete(id);state.dancers=state.dancers.filter(x=>x.id!==id); state.formations.forEach(f=>{delete f.positions[id];if(f.facings&&typeof f.facings==='object')delete f.facings[id];if(Array.isArray(f.dimmedDancers))f.dimmedDancers=f.dimmedDancers.filter(dancerId=>dancerId!==id);});Object.values(state.transitions||{}).forEach(targets=>Object.values(targets||{}).forEach(paths=>{if(paths&&typeof paths==='object')delete paths[id];})); saveState('Bailarín eliminado'); renderAll();
   }
   function duplicateFormation(){
-    const source=currentFormation(); const next=state.formations[state.activeFormation+1]; const cue=next?(source.cue+next.cue)/2:source.cue+4; const copy={id:uid(),name:`${source.name} (copia)`,cue,positions:JSON.parse(JSON.stringify(source.positions)),dimmedDancers:[...(source.dimmedDancers||[])]};
+    const source=currentFormation(); const next=state.formations[state.activeFormation+1]; const cue=next?(source.cue+next.cue)/2:source.cue+4; const copy={id:uid(),name:`${source.name} (copia)`,cue,positions:JSON.parse(JSON.stringify(source.positions)),dimmedDancers:[...(source.dimmedDancers||[])],facings:{...(source.facings||{})}};
     state.formations.splice(state.activeFormation+1,0,copy); state.activeFormation++; saveState('Formación duplicada'); renderAll();
   }
   function newFormation(){
     const positions={}; state.dancers.forEach((d,i)=>positions[d.id]={x:15+(i%5)*17,y:30+Math.floor(i/5)*28});
-    const last=state.formations[state.formations.length-1]; state.formations.push({id:uid(),name:`Formación ${state.formations.length+1}`,cue:(last?.cue||0)+8,positions,dimmedDancers:[]});clearDancerSelection(false);state.activeFormation=state.formations.length-1; saveState('Nueva formación creada'); renderAll();
+    const last=state.formations[state.formations.length-1],facings=Object.fromEntries(state.dancers.map(dancer=>[dancer.id,dancerFacing(last,dancer.id)])); state.formations.push({id:uid(),name:`Formación ${state.formations.length+1}`,cue:(last?.cue||0)+8,positions,dimmedDancers:[],facings});clearDancerSelection(false);state.activeFormation=state.formations.length-1; saveState('Nueva formación creada'); renderAll();
   }
   function moveFormation(i,delta){ const ni=i+delta;if(ni<0||ni>=state.formations.length)return;[state.formations[i],state.formations[ni]]=[state.formations[ni],state.formations[i]];state.activeFormation=ni;normalizeCues();saveState('Secuencia reordenada');renderAll(); }
   function renameFormation(i){ const name=prompt('Nombre de la formación:',state.formations[i].name);if(name?.trim()){state.formations[i].name=name.trim().slice(0,40);saveState(null,'Formación renombrada');renderAll();} }
@@ -589,7 +604,7 @@
     link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
   }
   function exportProject(){
-    const project={format:'trama-project',version:2,exportedAt:new Date().toISOString(),state:JSON.parse(JSON.stringify(state))};
+    const project={format:'trama-project',version:3,exportedAt:new Date().toISOString(),state:JSON.parse(JSON.stringify(state))};
     downloadFile(`${fileSlug(state.routineName)}.trama.json`,JSON.stringify(project,null,2),'application/json;charset=utf-8');
     showToast('Proyecto guardado en Descargas');
   }
@@ -604,7 +619,7 @@
       while(usedIds.has(id))id=`${id}-${i+1}`;usedIds.add(id);
       return {id,name:cleanText(d.name,`Bailarín ${i+1}`,24),color:/^#[0-9a-f]{6}$/i.test(d.color)?d.color:palette[i%palette.length]};
     });
-    const sourceFormations=source.formations.filter(f=>f&&typeof f==='object'),usedFormationIds=new Set();
+    const sourceFormations=source.formations.filter(f=>f&&typeof f==='object'),usedFormationIds=new Set(),sourceFront=['top','bottom','left','right'].includes(source.frontSide)?source.frontSide:'right';
     const formations=sourceFormations.map((f,formationIndex)=>{
       const positions={}; dancers.forEach((d,dancerIndex)=>{
         const sourceId=String(sourceDancers[dancerIndex]?.id??''); const sourcePositions=f.positions&&typeof f.positions==='object'?f.positions:{};
@@ -613,13 +628,14 @@
       });
       let id=String(f.id||uid()).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,64)||uid();while(usedFormationIds.has(id))id=uid();usedFormationIds.add(id);
       const dimmedDancers=Array.isArray(f.dimmedDancers)?f.dimmedDancers.map(sourceId=>{const dancerIndex=sourceDancers.findIndex(candidate=>String(candidate.id??'')===String(sourceId));return dancerIndex>=0?dancers[dancerIndex]?.id:null;}).filter(Boolean):[];
-      const cue=Number(f.cue); return {id,name:cleanText(f.name,`Formación ${formationIndex+1}`,40),cue:Number.isFinite(cue)?clamp(cue,0,86400):formationIndex*8,positions,dimmedDancers:[...new Set(dimmedDancers)]};
+      const sourceFacings=f.facings&&typeof f.facings==='object'?f.facings:{},facings={};dancers.forEach((d,dancerIndex)=>{const sourceId=String(sourceDancers[dancerIndex]?.id??''),raw=sourceFacings[sourceId];facings[d.id]=facingOptions[raw]?raw:(frontFacings[sourceFront]||'e');});
+      const cue=Number(f.cue); return {id,name:cleanText(f.name,`Formación ${formationIndex+1}`,40),cue:Number.isFinite(cue)?clamp(cue,0,86400):formationIndex*8,positions,dimmedDancers:[...new Set(dimmedDancers)],facings};
     });
     if(!formations.length)throw new Error('El proyecto necesita al menos una formación.');
     const transitions={};const sourceTransitions=source.transitions&&typeof source.transitions==='object'?source.transitions:{};
     sourceFormations.forEach((sourceFrom,fromIndex)=>{const rawTargets=sourceTransitions[String(sourceFrom.id??'')];if(!rawTargets||typeof rawTargets!=='object')return;Object.entries(rawTargets).forEach(([sourceToId,rawPaths])=>{const toIndex=sourceFormations.findIndex(candidate=>String(candidate.id??'')===sourceToId);if(toIndex<0||!rawPaths||typeof rawPaths!=='object')return;const paths={};Object.entries(rawPaths).forEach(([sourceDancerId,rawControl])=>{const dancerIndex=sourceDancers.findIndex(candidate=>String(candidate.id??'')===sourceDancerId);const x=Number(rawControl?.x),y=Number(rawControl?.y);if(dancerIndex>=0&&dancers[dancerIndex]&&Number.isFinite(x)&&Number.isFinite(y))paths[dancers[dancerIndex].id]={x:clamp(x,0,100),y:clamp(y,0,100)};});if(Object.keys(paths).length){transitions[formations[fromIndex].id]??={};transitions[formations[fromIndex].id][formations[toIndex].id]=paths;}});});
     const rows=clamp(Math.round(Number(source.rows)||6),2,12); const cols=clamp(Math.round(Number(source.cols)||9),2,16);
-    return {routineName:cleanText(source.routineName,'Nueva coreografía',60),rows,cols,frontSide:['top','bottom','left','right'].includes(source.frontSide)?source.frontSide:'right',musicName:cleanText(source.musicName,'',120),musicPath:cleanText(source.musicPath,'',500),dancers,formations,transitions,activeFormation:clamp(Math.round(Number(source.activeFormation)||0),0,formations.length-1),speed:clamp(Number(source.speed)||950,250,5000)};
+    return {routineName:cleanText(source.routineName,'Nueva coreografía',60),rows,cols,frontSide:sourceFront,musicName:cleanText(source.musicName,'',120),musicPath:cleanText(source.musicPath,'',500),dancers,formations,transitions,activeFormation:clamp(Math.round(Number(source.activeFormation)||0),0,formations.length-1),speed:clamp(Number(source.speed)||950,250,5000)};
   }
   async function importProjectFile(event){
     const input=event.target; const file=input.files?.[0]; if(!file)return;
@@ -635,14 +651,14 @@
   function csvCell(value){ return `"${String(value??'').replace(/"/g,'""')}"`; }
   function exportCsv(){
     const frontLabels={top:'Arriba',bottom:'Abajo',left:'Izquierda',right:'Derecha'};
-    const rows=[['Rutina','Formación','Orden','Tiempo','Bailarín','Color','Estado visual','X (%)','Y (%)','Frente','Filas','Columnas']];
-    state.formations.forEach((formation,index)=>state.dancers.forEach(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50};rows.push([state.routineName,formation.name,index+1,formatTime(formation.cue),dancer.name,dancer.color,isDancerDimmed(formation,dancer.id)?'Gris':'Color',Number(position.x).toFixed(2),Number(position.y).toFixed(2),frontLabels[state.frontSide],state.rows,state.cols]);}));
+    const rows=[['Rutina','Formación','Orden','Tiempo','Bailarín','Color','Estado visual','Mirada','X (%)','Y (%)','Frente','Filas','Columnas']];
+    state.formations.forEach((formation,index)=>state.dancers.forEach(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50},facing=dancerFacing(formation,dancer.id);rows.push([state.routineName,formation.name,index+1,formatTime(formation.cue),dancer.name,dancer.color,isDancerDimmed(formation,dancer.id)?'Gris':'Color',facingOptions[facing].label,Number(position.x).toFixed(2),Number(position.y).toFixed(2),frontLabels[state.frontSide],state.rows,state.cols]);}));
     const csv='\ufeff'+rows.map(row=>row.map(csvCell).join(',')).join('\r\n');downloadFile(`${fileSlug(state.routineName)}-posiciones.csv`,csv,'text/csv;charset=utf-8');showToast('CSV guardado en Descargas');
   }
   function formationSvg(formation,index){
     const x=42,y=58,w=816,h=408; const vertical=Array.from({length:state.cols+1},(_,i)=>`<line x1="${x+i*w/state.cols}" y1="${y}" x2="${x+i*w/state.cols}" y2="${y+h}"/>`).join('');
     const horizontal=Array.from({length:state.rows+1},(_,i)=>`<line x1="${x}" y1="${y+i*h/state.rows}" x2="${x+w}" y2="${y+i*h/state.rows}"/>`).join('');
-    const dots=state.dancers.map(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50};const cx=x+clamp(Number(position.x)||50,3,97)/100*w;const cy=y+clamp(Number(position.y)||50,5,95)/100*h,color=isDancerDimmed(formation,dancer.id)?'#aeb3bd':dancer.color;return `<g><circle cx="${cx}" cy="${cy}" r="16" fill="${color}" stroke="#fff" stroke-width="3"/><text class="initial" x="${cx}" y="${cy+4}">${escapeHtml(initials(dancer.name))}</text><text class="name" x="${cx}" y="${cy+31}">${escapeHtml(dancer.name)}</text></g>`;}).join('');
+    const dots=state.dancers.map(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50};const cx=x+clamp(Number(position.x)||50,3,97)/100*w,cy=y+clamp(Number(position.y)||50,5,95)/100*h,color=isDancerDimmed(formation,dancer.id)?'#aeb3bd':dancer.color,facing=dancerFacing(formation,dancer.id),angle=facingOptions[facing].angle;return `<g><circle cx="${cx}" cy="${cy}" r="16" fill="${color}" stroke="#fff" stroke-width="3"/><text class="initial" x="${cx}" y="${cy+4}">${escapeHtml(initials(dancer.name))}</text><g transform="translate(${cx} ${cy-23}) rotate(${angle})"><circle r="8" fill="#fff" stroke="#202a44" stroke-width="1.5"/><path d="M 0 -4 L 3.5 2.5 L 0 1 L -3.5 2.5 Z" fill="#202a44"/></g><text class="name" x="${cx}" y="${cy+31}">${escapeHtml(dancer.name)}</text></g>`;}).join('');
     const frontLabels={top:'↑ ARRIBA',bottom:'↓ ABAJO',left:'← IZQUIERDA',right:'DERECHA →'};
     return `<article><header><div><span>FORMACIÓN ${String(index+1).padStart(2,'0')}</span><h2>${escapeHtml(formation.name)}</h2></div><strong>${escapeHtml(formatTime(formation.cue))}</strong></header><svg viewBox="0 0 900 520" role="img" aria-label="${escapeHtml(formation.name)}"><rect class="stage-bg" x="${x}" y="${y}" width="${w}" height="${h}"/><g class="grid">${vertical}${horizontal}</g><line class="center" x1="450" y1="${y}" x2="450" y2="${y+h}"/><text class="front" x="450" y="500">FRENTE: ${frontLabels[state.frontSide]}</text>${dots}</svg></article>`;
   }
@@ -655,7 +671,7 @@
   $('addDancerBtn').onclick=$('addDancerSecondary').onclick=()=>openDancerDialog();
   $('duplicateBtn').onclick=$('duplicateTopBtn').onclick=duplicateFormation; $('newFormationBtn').onclick=newFormation;
   els.trajectoryDancer.onchange=e=>selectTrajectoryDancer(e.target.value);els.trajectoryEditBtn.onclick=toggleTrajectoryEditing;els.trajectoryResetBtn.onclick=resetSelectedTrajectory;els.trajectoryPreviewBtn.onclick=previewCurrentTransition;
-  els.toggleDancerDimBtn.onclick=toggleSelectedDancersDimmed;els.clearDancerSelectionBtn.onclick=()=>clearDancerSelection();els.stage.addEventListener('pointerdown',event=>{if(!trajectoryEditing&&!event.target.closest('.dancer-node'))clearDancerSelection();});
+  els.facingSelect.onchange=e=>setSelectedDancersFacing(e.target.value);els.toggleDancerDimBtn.onclick=toggleSelectedDancersDimmed;els.clearDancerSelectionBtn.onclick=()=>clearDancerSelection();els.stage.addEventListener('pointerdown',event=>{if(!trajectoryEditing&&!event.target.closest('.dancer-node'))clearDancerSelection();});
   $('exportProjectBtn').onclick=exportProject;$('importProjectInput').onchange=importProjectFile;$('exportCsvBtn').onclick=exportCsv;$('exportSheetsBtn').onclick=exportSheets;
   $('cloudLibraryBtn').onclick=()=>{renderCloudViews();renderCloudList();els.cloudDialog.showModal();if(cloudSession)refreshCloudList();};
   $('closeCloudDialog').onclick=()=>els.cloudDialog.close();$('cloudLoginForm').onsubmit=handleCloudLogin;
