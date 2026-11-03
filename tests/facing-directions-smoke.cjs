@@ -27,23 +27,38 @@ const { chromium } = require(playwrightModule);
     const ids = saved.dancers.slice(0, 3).map(dancer => dancer.id);
     return { facings: ids.map(id => saved.formations[0].facings[id]), activeFormation: saved.activeFormation };
   });
-  if (firstFormation.facings.join(',') !== 'nw,nw,e') throw new Error(`La dirección grupal no se guardó correctamente: ${firstFormation.facings.join(',')}`);
+  if (firstFormation.facings.join(',') !== '315,315,90') throw new Error(`La dirección grupal no se guardó correctamente: ${firstFormation.facings.join(',')}`);
   if (await page.locator('.dancer-node').nth(0).evaluate(node => node.style.getPropertyValue('--facing-angle')) !== '315deg') throw new Error('La flecha visible no cambió de dirección.');
 
   await page.locator('.formation-card').nth(1).locator('.formation-meta').click();
   await page.locator('.dancer-node').first().click();
-  await page.locator('#facingSelect').selectOption('s');
+  const dotBox = await page.locator('.dancer-node').first().locator('.node-dot').boundingBox();
+  const handleBox = await page.locator('.dancer-node').first().locator('.node-facing').boundingBox();
+  if (!dotBox || !handleBox) throw new Error('No se pudo ubicar la V de orientación.');
+  const center = { x: dotBox.x + dotBox.width / 2, y: dotBox.y + dotBox.height / 2 };
+  const targetAngle = 217;
+  const radians = targetAngle * Math.PI / 180;
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(center.x + Math.sin(radians) * 42, center.y - Math.cos(radians) * 42, { steps: 9 });
+  await page.mouse.up();
   const secondFacing = await page.evaluate(() => {
     const saved = JSON.parse(localStorage.getItem('trama-coreografia-v1'));
     return saved.formations[1].facings[saved.dancers[0].id];
   });
-  if (secondFacing !== 's') throw new Error('La mirada no se guardó de forma independiente por formación.');
+  const angleDistance = (a, b) => Math.abs((((a - b) + 540) % 360) - 180);
+  if (angleDistance(secondFacing, targetAngle) > 3) throw new Error(`La mirada libre no siguió el mouse: ${secondFacing}°.`);
+  const visibleAngle = Number.parseFloat(await page.locator('.dancer-node').first().evaluate(node => node.style.getPropertyValue('--facing-angle')));
+  if (angleDistance(visibleAngle, targetAngle) > 3) throw new Error('La V visible no quedó en la posición elegida.');
 
   await page.locator('.formation-card').first().locator('.formation-meta').click();
   if (await page.locator('.dancer-node').first().evaluate(node => node.style.getPropertyValue('--facing-angle')) !== '315deg') throw new Error('La primera formación perdió su dirección.');
   await page.reload({ waitUntil: 'domcontentloaded' });
   if (await page.locator('.dancer-node').first().evaluate(node => node.style.getPropertyValue('--facing-angle')) !== '315deg') throw new Error('La dirección no sobrevivió a la reapertura.');
 
+  await page.locator('.formation-card').nth(1).locator('.formation-meta').click();
+  const restoredFreeAngle = Number.parseFloat(await page.locator('.dancer-node').first().evaluate(node => node.style.getPropertyValue('--facing-angle')));
+  if (angleDistance(restoredFreeAngle, targetAngle) > 3) throw new Error('La dirección libre no sobrevivió a la reapertura.');
   if (process.env.TRAMA_SCREENSHOT) await page.screenshot({ path: process.env.TRAMA_SCREENSHOT, fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('.dancer-node').first().click();
@@ -51,7 +66,7 @@ const { chromium } = require(playwrightModule);
   if (mobile.scrollWidth > mobile.innerWidth || mobile.toolbarWidth > mobile.innerWidth) throw new Error('El selector de mirada desborda en formato celular.');
   if (errors.length) throw new Error(`Errores de navegador: ${errors.join(' | ')}`);
 
-  console.log(JSON.stringify({ ok: true, groupFacing: firstFormation.facings, independentByFormation: true, persisted: true, mobile }, null, 2));
+  console.log(JSON.stringify({ ok: true, groupFacing: firstFormation.facings, freeFacing: secondFacing, independentByFormation: true, persisted: true, mobile }, null, 2));
   await browser.close();
 })().catch(error => {
   console.error(error.stack || error);

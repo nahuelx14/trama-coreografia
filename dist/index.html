@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f2eb">
   <meta name="description" content="Diseñá, ordená y animá formaciones coreográficas.">
   <title>Trama — Diseñador coreográfico</title>
-  <link rel="stylesheet" href="styles.css?v=20261102-facing-directions">
+  <link rel="stylesheet" href="styles.css?v=20261102-free-facing">
 </head>
 <body>
   <div class="app-shell">
@@ -76,7 +76,7 @@
         <div class="selection-toolbar" id="selectionToolbar" hidden aria-live="polite">
           <div class="selection-copy"><span class="eyebrow">SELECCIÓN</span><strong id="selectionCount">1 bailarín seleccionado</strong><small id="selectionHint">Arrastralo para moverlo.</small></div>
           <div class="selection-actions">
-            <label class="facing-control" for="facingSelect"><span>Mirada</span><select id="facingSelect" aria-label="Dirección de la mirada de la selección"><option value="" disabled>Varias</option><option value="n">↑ Arriba</option><option value="ne">↗ Arriba derecha</option><option value="e">→ Derecha</option><option value="se">↘ Abajo derecha</option><option value="s">↓ Abajo</option><option value="sw">↙ Abajo izquierda</option><option value="w">← Izquierda</option><option value="nw">↖ Arriba izquierda</option></select></label>
+            <label class="facing-control" for="facingSelect"><span>Mirada</span><select id="facingSelect" aria-label="Dirección rápida de la mirada de la selección"><option value="" disabled>Dirección libre</option><option value="n">↑ Arriba</option><option value="ne">↗ Arriba derecha</option><option value="e">→ Derecha</option><option value="se">↘ Abajo derecha</option><option value="s">↓ Abajo</option><option value="sw">↙ Abajo izquierda</option><option value="w">← Izquierda</option><option value="nw">↖ Arriba izquierda</option></select></label>
             <button id="toggleDancerDimBtn" type="button"><span aria-hidden="true">◐</span><span id="toggleDancerDimLabel">Marcar en gris</span></button>
             <button id="clearDancerSelectionBtn" type="button">Quitar selección</button>
           </div>
@@ -259,6 +259,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20261102-facing-directions"></script>
+  <script src="app.js?v=20261102-free-facing"></script>
 </body>
 </html>

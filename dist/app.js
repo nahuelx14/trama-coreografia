@@ -23,7 +23,7 @@
   const positionsB = [[12,50],[22,37],[32,50],[42,37],[52,50],[62,37],[72,50],[82,37],[42,72],[62,72]];
   const positionsC = [[50,13],[36,28],[64,28],[24,46],[76,46],[15,68],[34,68],[50,80],[66,68],[85,68]];
   const toMap = values => Object.fromEntries(defaultDancers.map((d,i) => [d.id,{x:values[i][0],y:values[i][1]}]));
-  const toFacings = (direction='e') => Object.fromEntries(defaultDancers.map(d => [d.id,direction]));
+  const toFacings = (angle=90) => Object.fromEntries(defaultDancers.map(d => [d.id,angle]));
   const freshState = () => ({ routineName:'Nueva coreografía', rows:6, cols:9, frontSide:'right', musicName:'', musicPath:'', dancers:defaultDancers, formations:[
     {id:uid(),name:'Entrada',cue:0,positions:toMap(positionsA),dimmedDancers:[],facings:toFacings()},
     {id:uid(),name:'Diagonal',cue:8,positions:toMap(positionsB),dimmedDancers:[],facings:toFacings()},
@@ -72,6 +72,13 @@
   function uid(){ return 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
   function clamp(n,min,max){ return Math.min(max,Math.max(min,n)); }
   function initials(name){ return name.trim().split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase(); }
+  function normalizeFacingAngle(value,fallback=90){
+    const raw=Number(value);if(Number.isFinite(raw))return ((raw%360)+360)%360;
+    return facingOptions[value]?.angle??fallback;
+  }
+  function frontFacingAngle(front=state?.frontSide){return facingOptions[frontFacings[front]||'e'].angle;}
+  function nearestFacingDirection(angle){return Object.entries(facingOptions).reduce((best,[key,option])=>{const distance=Math.abs((((angle-option.angle)+540)%360)-180);return distance<best.distance?{key,distance}:best;},{key:'e',distance:Infinity});}
+  function facingLabel(angle){const normalized=normalizeFacingAngle(angle),nearest=nearestFacingDirection(normalized),degrees=Math.round(normalized);return nearest.distance<.5?facingOptions[nearest.key].label:`${degrees}° · hacia ${facingOptions[nearest.key].label}`;}
   function loadState(){
     try { const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)); if (saved?.formations?.length && saved?.dancers) return saved; } catch(e) {}
     return freshState();
@@ -140,7 +147,7 @@
     state.dancers.forEach((d,i)=>{ if(!formation.positions[d.id]) formation.positions[d.id] = {x:20+(i%5)*15,y:30+Math.floor(i/5)*25}; });
     formation.dimmedDancers=Array.isArray(formation.dimmedDancers)?formation.dimmedDancers.filter(id=>state.dancers.some(dancer=>dancer.id===id)):[];
     if(!formation.facings||typeof formation.facings!=='object')formation.facings={};
-    state.dancers.forEach(dancer=>{if(!facingOptions[formation.facings[dancer.id]])formation.facings[dancer.id]=frontFacings[state.frontSide]||'e';});
+    state.dancers.forEach(dancer=>formation.facings[dancer.id]=normalizeFacingAngle(formation.facings[dancer.id],frontFacingAngle()));
     Object.keys(formation.facings).forEach(id=>{if(!state.dancers.some(dancer=>dancer.id===id))delete formation.facings[id];});
   }
   function nextFormationIndex(index){ return state.formations.length<2?index:(index+1)%state.formations.length; }
@@ -199,14 +206,16 @@
     els.fileButtonText.textContent=state.musicName?'Cambiar MP3':'Elegir MP3';
   }
   function isDancerDimmed(formation,dancerId){return Array.isArray(formation?.dimmedDancers)&&formation.dimmedDancers.includes(dancerId);}
-  function dancerFacing(formation,dancerId){const value=formation?.facings?.[dancerId];return facingOptions[value]?value:(frontFacings[state.frontSide]||'e');}
+  function dancerFacing(formation,dancerId){return normalizeFacingAngle(formation?.facings?.[dancerId],frontFacingAngle());}
   function updateDancerSelectionUI(){
     selectedDancerIds=new Set([...selectedDancerIds].filter(id=>state.dancers.some(dancer=>dancer.id===id)));
     els.dancerLayer.querySelectorAll('.dancer-node').forEach(node=>{const selected=!trajectoryEditing&&selectedDancerIds.has(node.dataset.id);node.classList.toggle('group-selected',selected);node.setAttribute('aria-pressed',String(selected));});
     const count=trajectoryEditing?0:selectedDancerIds.size;els.selectionToolbar.hidden=!count;if(!count)return;
-    els.selectionCount.textContent=`${count} ${count===1?'bailarín seleccionado':'bailarines seleccionados'}`;els.selectionHint.textContent=count===1?'Arrastralo para moverlo. Ctrl + clic suma otros.':`Arrastrá cualquiera para mover los ${count} juntos.`;
+    els.selectionCount.textContent=`${count} ${count===1?'bailarín seleccionado':'bailarines seleccionados'}`;els.selectionHint.textContent=count===1?'Arrastrá el punto para moverlo o la V para girarlo.':`Mové los ${count} juntos o arrastrá una V para orientar el grupo.`;
     const dimmed=selectedDancerIds.size>0&&[...selectedDancerIds].every(id=>isDancerDimmed(currentFormation(),id));els.toggleDancerDimLabel.textContent=dimmed?'Restaurar color':'Marcar en gris';els.toggleDancerDimBtn.classList.toggle('restore',dimmed);
-    const directions=new Set([...selectedDancerIds].map(id=>dancerFacing(currentFormation(),id)));els.facingSelect.value=directions.size===1?[...directions][0]:'';
+    const angles=new Set([...selectedDancerIds].map(id=>Math.round(dancerFacing(currentFormation(),id)*10)/10)),placeholder=els.facingSelect.options[0];
+    if(angles.size!==1){placeholder.textContent='Varias direcciones';els.facingSelect.value='';}
+    else {const angle=[...angles][0],nearest=nearestFacingDirection(angle);if(nearest.distance<.5){placeholder.textContent='Dirección libre';els.facingSelect.value=nearest.key;}else{placeholder.textContent=`Libre · ${Math.round(angle)}°`;els.facingSelect.value='';}}
   }
   function clearDancerSelection(update=true){selectedDancerIds.clear();if(update)updateDancerSelectionUI();}
   function toggleSelectedDancersDimmed(){
@@ -214,20 +223,30 @@
     selectedDancerIds.forEach(id=>allDimmed?current.delete(id):current.add(id));formation.dimmedDancers=[...current];const count=selectedDancerIds.size,message=allDimmed?(count===1?'Color restaurado':'Colores restaurados'):(count===1?'Bailarín marcado en gris':`${count} bailarines marcados en gris`);saveState(message,allDimmed?'Color de bailarín restaurado':'Estado gris de bailarín actualizado');renderDancers();renderFormations();
   }
   function setSelectedDancersFacing(direction){
-    if(!selectedDancerIds.size||trajectoryEditing||!facingOptions[direction])return;const formation=currentFormation();formation.facings??={};selectedDancerIds.forEach(id=>formation.facings[id]=direction);
+    if(!selectedDancerIds.size||trajectoryEditing||!facingOptions[direction])return;const formation=currentFormation(),angle=facingOptions[direction].angle;formation.facings??={};selectedDancerIds.forEach(id=>formation.facings[id]=angle);
     const count=selectedDancerIds.size,label=facingOptions[direction].label;saveState(`${count===1?'Mirada actualizada':`Mirada de ${count} bailarines actualizada`}: ${label}`,count===1?'Dirección del bailarín actualizada':'Dirección grupal actualizada');renderDancers();renderFormations();
+  }
+  function startFacingDrag(event){
+    event.preventDefault();event.stopPropagation();if(trajectoryEditing||playback.playing)return;
+    const handle=event.currentTarget,node=handle.closest('.dancer-node'),id=node?.dataset.id;if(!node||!id)return;
+    if(!selectedDancerIds.has(id))selectedDancerIds=new Set([id]);updateDancerSelectionUI();
+    const ids=[...selectedDancerIds],dot=node.querySelector('.node-dot'),rect=dot.getBoundingClientRect(),centerX=rect.left+rect.width/2,centerY=rect.top+rect.height/2,formation=currentFormation();let moved=false,lastAngle=dancerFacing(formation,id);
+    handle.setPointerCapture(event.pointerId);
+    const move=pointer=>{const dx=pointer.clientX-centerX,dy=pointer.clientY-centerY;if(Math.hypot(dx,dy)<5)return;lastAngle=((Math.atan2(dx,-dy)*180/Math.PI)%360+360)%360;moved=true;ids.forEach(dancerId=>{formation.facings[dancerId]=lastAngle;const item=els.dancerLayer.querySelector(`[data-id="${CSS.escape(dancerId)}"]`);if(item)item.style.setProperty('--facing-angle',`${lastAngle}deg`);});const placeholder=els.facingSelect.options[0];placeholder.textContent=`Libre · ${Math.round(lastAngle)}°`;els.facingSelect.value='';};
+    const up=()=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',up);if(!moved)return;const count=ids.length;saveState(`Mirada guardada en ${Math.round(lastAngle)}°`,count===1?'Dirección libre del bailarín actualizada':'Dirección libre grupal actualizada');renderDancers();renderFormations();};
+    handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',up);
   }
   function renderDancers(displayPositions){
     const positions = displayPositions || currentFormation().positions;
     els.dancerLayer.innerHTML = '';
     state.dancers.forEach(dancer => {
       const pos = positions[dancer.id] || {x:50,y:50};
-      const dimmed=isDancerDimmed(currentFormation(),dancer.id),facing=dancerFacing(currentFormation(),dancer.id),facingMeta=facingOptions[facing];const selected=!trajectoryEditing&&selectedDancerIds.has(dancer.id);
+      const dimmed=isDancerDimmed(currentFormation(),dancer.id),facing=dancerFacing(currentFormation(),dancer.id);const selected=!trajectoryEditing&&selectedDancerIds.has(dancer.id);
       const node = document.createElement('button'); node.type='button'; node.className=`dancer-node${trajectoryEditing&&dancer.id===selectedTrajectoryDancerId?' trajectory-selected':''}${selected?' group-selected':''}${dimmed?' dimmed':''}`; node.dataset.id=dancer.id;
-      node.style.setProperty('--x',pos.x); node.style.setProperty('--y',pos.y); node.style.setProperty('--color',dancer.color);node.style.setProperty('--facing-angle',`${facingMeta.angle}deg`);
-      node.setAttribute('aria-pressed',String(selected));node.setAttribute('aria-label',trajectoryEditing?`Editar trayectoria de ${dancer.name}`:`${dancer.name}${dimmed?', marcado en gris':''}. Mira hacia ${facingMeta.label}. Posición ${Math.round(pos.x)}, ${Math.round(pos.y)}. Arrastrar para mover. Control más clic para seleccionar varios.`);
-      node.innerHTML = `<span class="node-dot"><span class="node-initial">${escapeHtml(initials(dancer.name))}</span><span class="node-facing" aria-hidden="true">↑</span></span><span class="node-label">${escapeHtml(dancer.name)}</span>`;
-      if(trajectoryEditing)node.addEventListener('click',()=>selectTrajectoryDancer(dancer.id));else{node.addEventListener('pointerdown', startDrag);node.addEventListener('keydown', keyboardMove);}
+      node.style.setProperty('--x',pos.x); node.style.setProperty('--y',pos.y); node.style.setProperty('--color',dancer.color);node.style.setProperty('--facing-angle',`${facing}deg`);
+      node.setAttribute('aria-pressed',String(selected));node.setAttribute('aria-label',trajectoryEditing?`Editar trayectoria de ${dancer.name}`:`${dancer.name}${dimmed?', marcado en gris':''}. Mira hacia ${facingLabel(facing)}. Posición ${Math.round(pos.x)}, ${Math.round(pos.y)}. Arrastrar para mover. Control más clic para seleccionar varios.`);
+      node.innerHTML = `<span class="node-dot"><span class="node-initial">${escapeHtml(initials(dancer.name))}</span><span class="node-facing" aria-hidden="true" title="Arrastrá esta V para girar la mirada"></span></span><span class="node-label">${escapeHtml(dancer.name)}</span>`;
+      if(trajectoryEditing)node.addEventListener('click',()=>selectTrajectoryDancer(dancer.id));else{node.querySelector('.node-facing').addEventListener('pointerdown',startFacingDrag);node.addEventListener('pointerdown', startDrag);node.addEventListener('keydown', keyboardMove);}
       els.dancerLayer.appendChild(node);
     });
     updateDancerSelectionUI();
@@ -328,7 +347,7 @@
   function submitDancer(event){
     event.preventDefault(); const name=els.dancerName.value.trim(); if(!name){els.dancerName.focus();return;}
     if(editingDancerId){ const d=state.dancers.find(x=>x.id===editingDancerId); d.name=name; d.color=selectedColor; showToast('Bailarín actualizado'); }
-    else { const id=uid(); state.dancers.push({id,name,color:selectedColor}); state.formations.forEach((f,i)=>{f.positions[id]={x:18+(state.dancers.length*11+i*5)%65,y:24+(state.dancers.length*17+i*7)%55};f.facings??={};f.facings[id]=frontFacings[state.frontSide]||'e';}); showToast('Bailarín agregado'); }
+    else { const id=uid(); state.dancers.push({id,name,color:selectedColor}); state.formations.forEach((f,i)=>{f.positions[id]={x:18+(state.dancers.length*11+i*5)%65,y:24+(state.dancers.length*17+i*7)%55};f.facings??={};f.facings[id]=frontFacingAngle();}); showToast('Bailarín agregado'); }
     saveState(null,editingDancerId?'Bailarín actualizado':'Bailarín agregado'); els.dialog.close(); renderAll();
   }
   function deleteDancer(id){
@@ -604,7 +623,7 @@
     link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
   }
   function exportProject(){
-    const project={format:'trama-project',version:3,exportedAt:new Date().toISOString(),state:JSON.parse(JSON.stringify(state))};
+    const project={format:'trama-project',version:4,exportedAt:new Date().toISOString(),state:JSON.parse(JSON.stringify(state))};
     downloadFile(`${fileSlug(state.routineName)}.trama.json`,JSON.stringify(project,null,2),'application/json;charset=utf-8');
     showToast('Proyecto guardado en Descargas');
   }
@@ -628,7 +647,7 @@
       });
       let id=String(f.id||uid()).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,64)||uid();while(usedFormationIds.has(id))id=uid();usedFormationIds.add(id);
       const dimmedDancers=Array.isArray(f.dimmedDancers)?f.dimmedDancers.map(sourceId=>{const dancerIndex=sourceDancers.findIndex(candidate=>String(candidate.id??'')===String(sourceId));return dancerIndex>=0?dancers[dancerIndex]?.id:null;}).filter(Boolean):[];
-      const sourceFacings=f.facings&&typeof f.facings==='object'?f.facings:{},facings={};dancers.forEach((d,dancerIndex)=>{const sourceId=String(sourceDancers[dancerIndex]?.id??''),raw=sourceFacings[sourceId];facings[d.id]=facingOptions[raw]?raw:(frontFacings[sourceFront]||'e');});
+      const sourceFacings=f.facings&&typeof f.facings==='object'?f.facings:{},facings={};dancers.forEach((d,dancerIndex)=>{const sourceId=String(sourceDancers[dancerIndex]?.id??''),raw=sourceFacings[sourceId],fallback=facingOptions[frontFacings[sourceFront]||'e'].angle;facings[d.id]=normalizeFacingAngle(raw,fallback);});
       const cue=Number(f.cue); return {id,name:cleanText(f.name,`Formación ${formationIndex+1}`,40),cue:Number.isFinite(cue)?clamp(cue,0,86400):formationIndex*8,positions,dimmedDancers:[...new Set(dimmedDancers)],facings};
     });
     if(!formations.length)throw new Error('El proyecto necesita al menos una formación.');
@@ -652,13 +671,13 @@
   function exportCsv(){
     const frontLabels={top:'Arriba',bottom:'Abajo',left:'Izquierda',right:'Derecha'};
     const rows=[['Rutina','Formación','Orden','Tiempo','Bailarín','Color','Estado visual','Mirada','X (%)','Y (%)','Frente','Filas','Columnas']];
-    state.formations.forEach((formation,index)=>state.dancers.forEach(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50},facing=dancerFacing(formation,dancer.id);rows.push([state.routineName,formation.name,index+1,formatTime(formation.cue),dancer.name,dancer.color,isDancerDimmed(formation,dancer.id)?'Gris':'Color',facingOptions[facing].label,Number(position.x).toFixed(2),Number(position.y).toFixed(2),frontLabels[state.frontSide],state.rows,state.cols]);}));
+    state.formations.forEach((formation,index)=>state.dancers.forEach(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50},facing=dancerFacing(formation,dancer.id);rows.push([state.routineName,formation.name,index+1,formatTime(formation.cue),dancer.name,dancer.color,isDancerDimmed(formation,dancer.id)?'Gris':'Color',facingLabel(facing),Number(position.x).toFixed(2),Number(position.y).toFixed(2),frontLabels[state.frontSide],state.rows,state.cols]);}));
     const csv='\ufeff'+rows.map(row=>row.map(csvCell).join(',')).join('\r\n');downloadFile(`${fileSlug(state.routineName)}-posiciones.csv`,csv,'text/csv;charset=utf-8');showToast('CSV guardado en Descargas');
   }
   function formationSvg(formation,index){
     const x=42,y=58,w=816,h=408; const vertical=Array.from({length:state.cols+1},(_,i)=>`<line x1="${x+i*w/state.cols}" y1="${y}" x2="${x+i*w/state.cols}" y2="${y+h}"/>`).join('');
     const horizontal=Array.from({length:state.rows+1},(_,i)=>`<line x1="${x}" y1="${y+i*h/state.rows}" x2="${x+w}" y2="${y+i*h/state.rows}"/>`).join('');
-    const dots=state.dancers.map(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50};const cx=x+clamp(Number(position.x)||50,3,97)/100*w,cy=y+clamp(Number(position.y)||50,5,95)/100*h,color=isDancerDimmed(formation,dancer.id)?'#aeb3bd':dancer.color,facing=dancerFacing(formation,dancer.id),angle=facingOptions[facing].angle;return `<g><circle cx="${cx}" cy="${cy}" r="16" fill="${color}" stroke="#fff" stroke-width="3"/><text class="initial" x="${cx}" y="${cy+4}">${escapeHtml(initials(dancer.name))}</text><g transform="translate(${cx} ${cy-23}) rotate(${angle})"><circle r="8" fill="#fff" stroke="#202a44" stroke-width="1.5"/><path d="M 0 -4 L 3.5 2.5 L 0 1 L -3.5 2.5 Z" fill="#202a44"/></g><text class="name" x="${cx}" y="${cy+31}">${escapeHtml(dancer.name)}</text></g>`;}).join('');
+    const dots=state.dancers.map(dancer=>{const position=formation.positions[dancer.id]||{x:50,y:50};const cx=x+clamp(Number(position.x)||50,3,97)/100*w,cy=y+clamp(Number(position.y)||50,5,95)/100*h,color=isDancerDimmed(formation,dancer.id)?'#aeb3bd':dancer.color,angle=dancerFacing(formation,dancer.id),radians=angle*Math.PI/180,arrowX=cx+Math.sin(radians)*25,arrowY=cy-Math.cos(radians)*25;return `<g><circle cx="${cx}" cy="${cy}" r="16" fill="${color}" stroke="#fff" stroke-width="3"/><text class="initial" x="${cx}" y="${cy+4}">${escapeHtml(initials(dancer.name))}</text><g transform="translate(${arrowX} ${arrowY}) rotate(${angle})"><path d="M -6 3 L 0 -4 L 6 3" fill="none" stroke="#202a44" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></g><text class="name" x="${cx}" y="${cy+31}">${escapeHtml(dancer.name)}</text></g>`;}).join('');
     const frontLabels={top:'↑ ARRIBA',bottom:'↓ ABAJO',left:'← IZQUIERDA',right:'DERECHA →'};
     return `<article><header><div><span>FORMACIÓN ${String(index+1).padStart(2,'0')}</span><h2>${escapeHtml(formation.name)}</h2></div><strong>${escapeHtml(formatTime(formation.cue))}</strong></header><svg viewBox="0 0 900 520" role="img" aria-label="${escapeHtml(formation.name)}"><rect class="stage-bg" x="${x}" y="${y}" width="${w}" height="${h}"/><g class="grid">${vertical}${horizontal}</g><line class="center" x1="450" y1="${y}" x2="450" y2="${y+h}"/><text class="front" x="450" y="500">FRENTE: ${frontLabels[state.frontSide]}</text>${dots}</svg></article>`;
   }
