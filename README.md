@@ -65,3 +65,9 @@ supabase/
 ## Datos y privacidad
 
 La rutina y sus marcas de tiempo se guardan automáticamente en el navegador. Al iniciar sesión, las coreografías y sus MP3 se sincronizan con Supabase y quedan protegidos mediante políticas Row Level Security. Al copiar una coreografía mediante su código, se crea una edición independiente que conserva acceso al audio asociado. Los MP3 no se incluyen en los archivos `.trama.json` exportados. La configuración necesaria de Supabase está documentada en [`SUPABASE.md`](SUPABASE.md).
+
+## Edición del recorrido por participante
+
+Seleccioná un participante en el pizarrón y usá «Editar recorrido de…». El destino es su posición en la formación siguiente. Arrastrá el control para curvar el camino o agregá puntos intermedios con «＋ Punto»; «− Último punto» elimina el último y «Recta» restablece el recorrido directo. Los puntos numerados también se pueden quitar con Suprimir al enfocarlos.
+
+Cada participante tiene un recorrido independiente por transición. La duración es la diferencia entre las marcas de ambas formaciones: al cambiar el tiempo, el camino se conserva y la velocidad se adapta para llegar al mismo destino. «Probar» reproduce esa duración real y se puede volver a pulsar para detener la prueba. La última formación no ofrece un recorrido hacia el inicio.

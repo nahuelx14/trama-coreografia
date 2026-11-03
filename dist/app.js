@@ -157,12 +157,20 @@
     if(create){state.transitions[fromId]??={};state.transitions[fromId][toId]??={};}
     const map=state.transitions[fromId]?.[toId];return map&&typeof map==='object'?map:null;
   }
+  function sanitizeTrajectory(raw){
+    if(Array.isArray(raw?.points)){const points=raw.points.slice(0,24).filter(p=>p&&Number.isFinite(Number(p.x))&&Number.isFinite(Number(p.y))).map(p=>({x:clamp(Number(p.x),0,100),y:clamp(Number(p.y),0,100)}));return points.length?{points}:null;}
+    return raw&&Number.isFinite(Number(raw.x))&&Number.isFinite(Number(raw.y))?{x:clamp(Number(raw.x),0,100),y:clamp(Number(raw.y),0,100)}:null;
+  }
+  function hasNextTrajectory(){return state.activeFormation<state.formations.length-1;}
+  function transitionSeconds(index=state.activeFormation){return Math.max(.1,(state.formations[index+1]?.cue||0)-(state.formations[index]?.cue||0));}
   function trajectoryControl(fromIndex,toIndex,dancerId){
-    const raw=transitionMap(fromIndex,toIndex)?.[dancerId];if(!raw||!Number.isFinite(Number(raw.x))||!Number.isFinite(Number(raw.y)))return null;
-    return {x:clamp(Number(raw.x),0,100),y:clamp(Number(raw.y),0,100)};
+    return sanitizeTrajectory(transitionMap(fromIndex,toIndex)?.[dancerId]);
   }
   function pointOnTransition(fromIndex,toIndex,dancerId,t){
     const from=state.formations[fromIndex]?.positions[dancerId]||{x:50,y:50};const to=state.formations[toIndex]?.positions[dancerId]||from;const control=trajectoryControl(fromIndex,toIndex,dancerId);
+    t=clamp(t,0,1);
+    if(control?.points){const points=[from,...control.points,to],lengths=points.slice(1).map((p,i)=>Math.hypot(p.x-points[i].x,p.y-points[i].y));let distance=lengths.reduce((a,b)=>a+b,0)*t;
+      for(let i=0;i<lengths.length;i++){if(distance<=lengths[i]&&lengths[i]>0){const p=distance/lengths[i];return {x:points[i].x+(points[i+1].x-points[i].x)*p,y:points[i].y+(points[i+1].y-points[i].y)*p};}distance-=lengths[i];}return {...to};}
     if(!control)return {x:from.x+(to.x-from.x)*t,y:from.y+(to.y-from.y)*t};
     const inverse=1-t;return {x:inverse*inverse*from.x+2*inverse*t*control.x+t*t*to.x,y:inverse*inverse*from.y+2*inverse*t*control.y+t*t*to.y};
   }
@@ -210,12 +218,21 @@
   function updateDancerSelectionUI(){
     selectedDancerIds=new Set([...selectedDancerIds].filter(id=>state.dancers.some(dancer=>dancer.id===id)));
     els.dancerLayer.querySelectorAll('.dancer-node').forEach(node=>{const selected=!trajectoryEditing&&selectedDancerIds.has(node.dataset.id);node.classList.toggle('group-selected',selected);node.setAttribute('aria-pressed',String(selected));});
-    const count=trajectoryEditing?0:selectedDancerIds.size;els.selectionToolbar.hidden=!count;if(!count)return;
+    const count=trajectoryEditing?0:selectedDancerIds.size;els.selectionToolbar.hidden=!count;if(count===1)selectedTrajectoryDancerId=[...selectedDancerIds][0];updateRouteShortcut();if(!count)return;
     els.selectionCount.textContent=`${count} ${count===1?'bailarín seleccionado':'bailarines seleccionados'}`;els.selectionHint.textContent=count===1?'Arrastrá el punto para moverlo o la V para girarlo.':`Mové los ${count} juntos o arrastrá una V para orientar el grupo.`;
     const dimmed=selectedDancerIds.size>0&&[...selectedDancerIds].every(id=>isDancerDimmed(currentFormation(),id));els.toggleDancerDimLabel.textContent=dimmed?'Restaurar color':'Marcar en gris';els.toggleDancerDimBtn.classList.toggle('restore',dimmed);
     const angles=new Set([...selectedDancerIds].map(id=>Math.round(dancerFacing(currentFormation(),id)*10)/10)),placeholder=els.facingSelect.options[0];
     if(angles.size!==1){placeholder.textContent='Varias direcciones';els.facingSelect.value='';}
     else {const angle=[...angles][0],nearest=nearestFacingDirection(angle);if(nearest.distance<.5){placeholder.textContent='Dirección libre';els.facingSelect.value=nearest.key;}else{placeholder.textContent=`Libre · ${Math.round(angle)}°`;els.facingSelect.value='';}}
+  }
+  function updateRouteShortcut(){
+    const button=$('selectedRouteBtn');const id=trajectoryEditing?selectedTrajectoryDancerId:(selectedDancerIds.size===1?[...selectedDancerIds][0]:null);const dancer=state.dancers.find(d=>d.id===id);button.hidden=!dancer;button.disabled=!hasNextTrajectory();button.textContent=trajectoryEditing?'✓ Terminar recorrido':dancer?`Editar recorrido de ${dancer.name}`:'';button.title=hasNextTrajectory()?'El destino es la siguiente formación':'Esta es la última formación';
+  }
+  function addTrajectoryPoint(){
+    if(!hasNextTrajectory()||!selectedTrajectoryDancerId)return;const from=state.activeFormation,to=from+1,id=selectedTrajectoryDancerId,route=trajectoryControl(from,to,id);let points=route?.points?[...route.points]:route?[.25,.5,.75].map(t=>pointOnTransition(from,to,id,t)):[];
+    if(points.length>=24){showToast('El recorrido admite hasta 24 puntos');return;}
+    const all=[state.formations[from].positions[id],...points,state.formations[to].positions[id]];let segment=0;for(let i=1;i<all.length-1;i++)if(Math.hypot(all[i+1].x-all[i].x,all[i+1].y-all[i].y)>Math.hypot(all[segment+1].x-all[segment].x,all[segment+1].y-all[segment].y))segment=i;
+    points.splice(segment,0,{x:(all[segment].x+all[segment+1].x)/2,y:(all[segment].y+all[segment+1].y)/2});transitionMap(from,to,true)[id]={points};saveState('Punto de recorrido agregado');renderTrajectoryEditor();els.stageFrame.scrollIntoView({block:'nearest'});
   }
   function clearDancerSelection(update=true){selectedDancerIds.clear();if(update)updateDancerSelectionUI();}
   function toggleSelectedDancersDimmed(){
@@ -253,11 +270,12 @@
   }
   function trajectoryPathData(fromIndex,toIndex,dancerId,control){
     const from=state.formations[fromIndex].positions[dancerId]||{x:50,y:50};const to=state.formations[toIndex].positions[dancerId]||from;
+    if(control?.points)return `M ${from.x} ${from.y} ${[...control.points,to].map(p=>`L ${p.x} ${p.y}`).join(" ")}`;
     return control?`M ${from.x} ${from.y} Q ${control.x} ${control.y} ${to.x} ${to.y}`:`M ${from.x} ${from.y} L ${to.x} ${to.y}`;
   }
   function renderTrajectoryOverlay(){
     els.trajectoryLayer.innerHTML='';els.trajectoryHandleLayer.innerHTML='';els.stage.classList.toggle('trajectory-editing',trajectoryEditing);
-    if(!trajectoryEditing||state.formations.length<2||!selectedTrajectoryDancerId)return;
+    if(!trajectoryEditing||!hasNextTrajectory()||!selectedTrajectoryDancerId)return;
     const fromIndex=state.activeFormation,toIndex=nextFormationIndex(fromIndex),map=transitionMap(fromIndex,toIndex);
     state.dancers.forEach(dancer=>{
       const control=trajectoryControl(fromIndex,toIndex,dancer.id);if(!control&&dancer.id!==selectedTrajectoryDancerId)return;
@@ -265,32 +283,32 @@
     });
     const from=state.formations[fromIndex].positions[selectedTrajectoryDancerId]||{x:50,y:50};const to=state.formations[toIndex].positions[selectedTrajectoryDancerId]||from;const control=trajectoryControl(fromIndex,toIndex,selectedTrajectoryDancerId)||{x:(from.x+to.x)/2,y:(from.y+to.y)/2};
     const endpoint=document.createElementNS('http://www.w3.org/2000/svg','circle');endpoint.setAttribute('class','trajectory-endpoint');endpoint.setAttribute('cx',to.x);endpoint.setAttribute('cy',to.y);endpoint.setAttribute('r','1.6');els.trajectoryLayer.appendChild(endpoint);
-    const handle=document.createElement('button');handle.type='button';handle.className='trajectory-handle';handle.style.setProperty('--x',control.x);handle.style.setProperty('--y',control.y);handle.setAttribute('aria-label','Arrastrar para curvar el recorrido');handle.addEventListener('pointerdown',startTrajectoryHandleDrag);els.trajectoryHandleLayer.appendChild(handle);
+    (control.points||[control]).forEach((point,index)=>{const handle=document.createElement('button');handle.type='button';handle.className='trajectory-handle';handle.dataset.point=control.points?index:'';handle.style.setProperty('--x',point.x);handle.style.setProperty('--y',point.y);handle.textContent=control.points?index+1:'';handle.setAttribute('aria-label',control.points?`Punto ${index+1}. Arrastrá para mover; Suprimir para quitar.`:'Arrastrar para curvar el recorrido');handle.addEventListener('pointerdown',startTrajectoryHandleDrag);handle.onkeydown=e=>{if(control.points&&['Delete','Backspace'].includes(e.key)){e.preventDefault();const map=transitionMap(fromIndex,toIndex,true);map[selectedTrajectoryDancerId].points.splice(index,1);if(!map[selectedTrajectoryDancerId].points.length)delete map[selectedTrajectoryDancerId];saveState('Punto del recorrido eliminado');renderTrajectoryEditor();}};els.trajectoryHandleLayer.appendChild(handle);});
   }
   function renderTrajectoryEditor(){
-    const hasTransition=state.formations.length>1;if(!selectedTrajectoryDancerId||!state.dancers.some(d=>d.id===selectedTrajectoryDancerId))selectedTrajectoryDancerId=state.dancers[0]?.id||null;
+    const hasTransition=hasNextTrajectory();if(!hasTransition)trajectoryEditing=false;if(!selectedTrajectoryDancerId||!state.dancers.some(d=>d.id===selectedTrajectoryDancerId))selectedTrajectoryDancerId=state.dancers[0]?.id||null;
     const fromIndex=state.activeFormation,toIndex=nextFormationIndex(fromIndex),from=state.formations[fromIndex],to=state.formations[toIndex];
-    els.trajectoryTitle.textContent=hasTransition?`${from.name} → ${to.name}`:'Agregá otra formación';
+    els.trajectoryTitle.textContent=hasTransition?`${from.name} → ${to.name} · ${Number(transitionSeconds().toFixed(1))} s`:'Esta es la última formación';
     els.trajectoryDancer.innerHTML=state.dancers.map(d=>`<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('');if(selectedTrajectoryDancerId)els.trajectoryDancer.value=selectedTrajectoryDancerId;
     const custom=hasTransition&&selectedTrajectoryDancerId?trajectoryControl(fromIndex,toIndex,selectedTrajectoryDancerId):null;
-    els.trajectoryHint.textContent=trajectoryEditing?'Arrastrá el punto rojo para dibujar la curva. Tocá otro bailarín para cambiarlo.':custom?'Este bailarín tiene un recorrido curvo guardado.':'Elegí un bailarín y editá el camino que recorre.';
+    els.trajectoryHint.textContent=hasTransition?`${state.dancers.find(d=>d.id===selectedTrajectoryDancerId)?.name||'Participante'} llega a ${to.name} en ${preciseTime(to.cue)}. Si movés el corte, se ajusta la velocidad y se conserva el destino.`:'Agregá una formación después de esta para definir un destino.';
     els.trajectoryEditBtn.disabled=!hasTransition||!state.dancers.length;els.trajectoryEditBtn.classList.toggle('active',trajectoryEditing);els.trajectoryEditBtn.textContent=trajectoryEditing?'Terminar edición':'Editar recorrido';
-    els.trajectoryResetBtn.disabled=!custom;els.trajectoryPreviewBtn.disabled=!hasTransition||!state.dancers.length;renderTrajectoryOverlay();
+    $('trajectoryAddPointBtn').disabled=!hasTransition||!trajectoryEditing;$('trajectoryRemovePointBtn').disabled=!trajectoryEditing||!custom?.points?.length;els.trajectoryResetBtn.disabled=!custom;els.trajectoryPreviewBtn.disabled=!hasTransition||!state.dancers.length;updateRouteShortcut();renderTrajectoryOverlay();
   }
-  function selectTrajectoryDancer(id){selectedTrajectoryDancerId=id;renderDancers();renderTrajectoryEditor();}
+  function selectTrajectoryDancer(id){selectedTrajectoryDancerId=id;if(!trajectoryEditing)selectedDancerIds=new Set([id]);renderDancers();renderTrajectoryEditor();}
   function startTrajectoryHandleDrag(event){
     event.preventDefault();const handle=event.currentTarget,fromIndex=state.activeFormation,toIndex=nextFormationIndex(fromIndex),dancerId=selectedTrajectoryDancerId;if(!dancerId)return;let moved=false;handle.setPointerCapture(event.pointerId);
-    const move=e=>{moved=true;const rect=els.stage.getBoundingClientRect(),x=clamp((e.clientX-rect.left)/rect.width*100,0,100),y=clamp((e.clientY-rect.top)/rect.height*100,0,100),map=transitionMap(fromIndex,toIndex,true);map[dancerId]={x,y};handle.style.setProperty('--x',x);handle.style.setProperty('--y',y);const path=els.trajectoryLayer.querySelector('.trajectory-path.selected');if(path){path.classList.add('custom');path.setAttribute('d',trajectoryPathData(fromIndex,toIndex,dancerId,{x,y}));}};
+    const move=e=>{moved=true;const rect=els.stage.getBoundingClientRect(),x=clamp((e.clientX-rect.left)/rect.width*100,0,100),y=clamp((e.clientY-rect.top)/rect.height*100,0,100),map=transitionMap(fromIndex,toIndex,true);const route=trajectoryControl(fromIndex,toIndex,dancerId);if(handle.dataset.point!==''&&route?.points){route.points[Number(handle.dataset.point)]={x,y};map[dancerId]=route;}else map[dancerId]={x,y};handle.style.setProperty('--x',x);handle.style.setProperty('--y',y);const path=els.trajectoryLayer.querySelector('.trajectory-path.selected');if(path){path.classList.add('custom');path.setAttribute('d',trajectoryPathData(fromIndex,toIndex,dancerId,map[dancerId]));}};
     const up=()=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',up);if(moved)saveState('Trayectoria guardada');renderTrajectoryEditor();};
     handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',up);
   }
-  function toggleTrajectoryEditing(){if(playback.playing)stopPlayback();trajectoryEditing=!trajectoryEditing;if(trajectoryEditing)clearDancerSelection(false);renderDancers();renderTrajectoryEditor();if(trajectoryEditing)showToast('Arrastrá el punto rojo para curvar el recorrido');}
+  function toggleTrajectoryEditing(){if(!hasNextTrajectory())return;if(!els.audio.paused)els.audio.pause();if(playback.playing)stopPlayback();trajectoryEditing=!trajectoryEditing;if(trajectoryEditing)clearDancerSelection(false);renderDancers();renderTrajectoryEditor();if(trajectoryEditing){els.stageFrame.scrollIntoView({block:'nearest'});showToast('Arrastrá el punto rojo. Agregá puntos para definir más tramos.');}}
   function resetSelectedTrajectory(){
     if(state.formations.length<2||!selectedTrajectoryDancerId)return;const from=state.formations[state.activeFormation],to=state.formations[nextFormationIndex(state.activeFormation)],map=transitionMap(state.activeFormation,nextFormationIndex(state.activeFormation));if(!map)return;
     delete map[selectedTrajectoryDancerId];if(!Object.keys(map).length){delete state.transitions[from.id][to.id];if(!Object.keys(state.transitions[from.id]).length)delete state.transitions[from.id];}saveState('Recorrido recto restaurado');renderTrajectoryEditor();
   }
   function previewCurrentTransition(){
-    if(state.formations.length<2||playback.playing)return;clearDancerSelection(false);if(audioReady&&!els.audio.paused)els.audio.pause();els.trajectoryHandleLayer.innerHTML='';playback.from=state.activeFormation;playback.to=nextFormationIndex(playback.from);playback.started=performance.now();playback.pausedAt=0;playback.previewOnly=true;playback.playing=true;els.trajectoryPreviewBtn.textContent='Ⅱ Probando';els.playIcon.textContent='Ⅱ';els.playStatus.textContent='Probando trayectoria';renderDancers();playback.frame=requestAnimationFrame(tickPlayback);
+    if(!hasNextTrajectory())return;if(playback.playing){stopPlayback();return;}clearDancerSelection(false);if(audioReady&&!els.audio.paused)els.audio.pause();els.trajectoryHandleLayer.innerHTML='';playback.from=state.activeFormation;playback.to=nextFormationIndex(playback.from);playback.started=performance.now();playback.pausedAt=0;playback.previewOnly=true;playback.playing=true;els.trajectoryPreviewBtn.textContent='Ⅱ Probando';els.playIcon.textContent='Ⅱ';els.playStatus.textContent='Probando trayectoria';renderDancers();els.stageFrame.scrollIntoView({block:'nearest'});playback.frame=requestAnimationFrame(tickPlayback);
   }
   function startDrag(event){
     if(playback.playing) stopPlayback(false);
@@ -377,7 +395,7 @@
   }
   function setCue(index,seconds){
     if(!Number.isFinite(seconds)){showToast('Usá un tiempo como 0:24 o 24');renderFormations();return;}
-    const formation=state.formations[index];formation.cue=boundedCue(index,seconds);state.activeFormation=index;
+    const formation=state.formations[index];formation.cue=boundedCue(index,seconds);if(!trajectoryEditing)state.activeFormation=index;
     saveState(index===0?'F1 comienza siempre en 0:00':'Tiempo de llegada actualizado',`Tiempo de “${formation.name}” actualizado`);renderAll();
   }
 
@@ -404,9 +422,9 @@
   function pausePlayback(){ playback.playing=false; playback.pausedAt=Math.max(0,performance.now()-playback.started); cancelAnimationFrame(playback.frame);if(playback.previewOnly){playback.previewOnly=false;els.trajectoryPreviewBtn.textContent='▶ Probar';}els.playIcon.textContent='▶';els.playStatus.textContent='Secuencia en pausa'; }
   function stopPlayback(render=true){ playback.playing=false;playback.previewOnly=false;playback.pausedAt=0;cancelAnimationFrame(playback.frame);els.trajectoryPreviewBtn.textContent='▶ Probar';els.playIcon.textContent='▶';els.playStatus.textContent='Lista para ensayar';els.progressFill.style.width='0%';if(render){renderDancers();renderTrajectoryOverlay();} }
   function tickPlayback(now){
-    if(!playback.playing)return; const duration=Number(state.speed||950); const raw=(now-playback.started)/duration; const p=clamp(raw,0,1); const eased=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+    if(!playback.playing)return; const duration=playback.previewOnly?transitionSeconds(playback.from)*1000:Number(state.speed||950); const raw=(now-playback.started)/duration; const p=clamp(raw,0,1); const eased=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
     const inter=interpolatedPositions(playback.from,playback.to,eased);
-    renderDancers(inter); els.progressFill.style.width=`${p*100}%`; els.progressCurrent.textContent=String(playback.from+1).padStart(2,'0');els.progressNext.textContent=String(playback.to+1).padStart(2,'0');
+    renderDancers(inter); els.progressFill.style.width=`${p*100}%`;if(playback.previewOnly){els.playStatus.textContent=`Recorrido · ${(p*duration/1000).toFixed(1)} / ${(duration/1000).toFixed(1)} s`;} els.progressCurrent.textContent=String(playback.from+1).padStart(2,'0');els.progressNext.textContent=String(playback.to+1).padStart(2,'0');
     if(p>=1){
       if(playback.previewOnly){const origin=playback.from;playback.playing=false;playback.previewOnly=false;playback.pausedAt=0;els.trajectoryPreviewBtn.textContent='▶ Probar';els.playIcon.textContent='▶';els.playStatus.textContent='Trayectoria lista';setTimeout(()=>{if(!playback.playing&&state.activeFormation===origin){renderDancers();renderTrajectoryOverlay();els.progressFill.style.width='0%';updatePlaybackLabels();}},320);return;}
       state.activeFormation=playback.to;playback.from=playback.to;playback.to=(playback.from+1)%state.formations.length;playback.started=now+260;playback.pausedAt=0;renderFormations();renderTrajectoryEditor();
@@ -648,7 +666,7 @@
     });
     if(!formations.length)throw new Error('El proyecto necesita al menos una formación.');
     const transitions={};const sourceTransitions=source.transitions&&typeof source.transitions==='object'?source.transitions:{};
-    sourceFormations.forEach((sourceFrom,fromIndex)=>{const rawTargets=sourceTransitions[String(sourceFrom.id??'')];if(!rawTargets||typeof rawTargets!=='object')return;Object.entries(rawTargets).forEach(([sourceToId,rawPaths])=>{const toIndex=sourceFormations.findIndex(candidate=>String(candidate.id??'')===sourceToId);if(toIndex<0||!rawPaths||typeof rawPaths!=='object')return;const paths={};Object.entries(rawPaths).forEach(([sourceDancerId,rawControl])=>{const dancerIndex=sourceDancers.findIndex(candidate=>String(candidate.id??'')===sourceDancerId);const x=Number(rawControl?.x),y=Number(rawControl?.y);if(dancerIndex>=0&&dancers[dancerIndex]&&Number.isFinite(x)&&Number.isFinite(y))paths[dancers[dancerIndex].id]={x:clamp(x,0,100),y:clamp(y,0,100)};});if(Object.keys(paths).length){transitions[formations[fromIndex].id]??={};transitions[formations[fromIndex].id][formations[toIndex].id]=paths;}});});
+    sourceFormations.forEach((sourceFrom,fromIndex)=>{const rawTargets=sourceTransitions[String(sourceFrom.id??'')];if(!rawTargets||typeof rawTargets!=='object')return;Object.entries(rawTargets).forEach(([sourceToId,rawPaths])=>{const toIndex=sourceFormations.findIndex(candidate=>String(candidate.id??'')===sourceToId);if(toIndex<0||!rawPaths||typeof rawPaths!=='object')return;const paths={};Object.entries(rawPaths).forEach(([sourceDancerId,rawControl])=>{const dancerIndex=sourceDancers.findIndex(candidate=>String(candidate.id??'')===sourceDancerId);const route=sanitizeTrajectory(rawControl);if(dancerIndex>=0&&dancers[dancerIndex]&&route)paths[dancers[dancerIndex].id]=route;});if(Object.keys(paths).length){transitions[formations[fromIndex].id]??={};transitions[formations[fromIndex].id][formations[toIndex].id]=paths;}});});
     const rows=clamp(Math.round(Number(source.rows)||6),2,12); const cols=clamp(Math.round(Number(source.cols)||9),2,16);
     return {songId:cleanText(source.songId,'',120),routineName:cleanText(source.routineName,'Nueva coreografía',60),rows,cols,frontSide:sourceFront,musicName:cleanText(source.musicName,'',120),musicPath:cleanText(source.musicPath,'',500),dancers,formations,transitions,activeFormation:clamp(Math.round(Number(source.activeFormation)||0),0,formations.length-1),speed:clamp(Number(source.speed)||950,250,5000)};
   }
@@ -770,6 +788,7 @@
   }
 
   $('duplicateBtn').onclick=$('duplicateTopBtn').onclick=duplicateFormation; $('newFormationBtn').onclick=newFormation;
+  $('selectedRouteBtn').onclick=()=>{if(selectedDancerIds.size===1)selectedTrajectoryDancerId=[...selectedDancerIds][0];toggleTrajectoryEditing();els.stageFrame.scrollIntoView({block:'nearest'});};$('trajectoryAddPointBtn').onclick=addTrajectoryPoint;$('trajectoryRemovePointBtn').onclick=()=>{const map=transitionMap(state.activeFormation,state.activeFormation+1);const route=map?.[selectedTrajectoryDancerId];if(!route?.points?.length)return;route.points.pop();if(!route.points.length)delete map[selectedTrajectoryDancerId];saveState('Último punto del recorrido eliminado');renderTrajectoryEditor();};
   els.trajectoryDancer.onchange=e=>selectTrajectoryDancer(e.target.value);els.trajectoryEditBtn.onclick=toggleTrajectoryEditing;els.trajectoryResetBtn.onclick=resetSelectedTrajectory;els.trajectoryPreviewBtn.onclick=previewCurrentTransition;
   els.facingSelect.onchange=e=>setSelectedDancersFacing(e.target.value);els.toggleDancerDimBtn.onclick=toggleSelectedDancersDimmed;els.clearDancerSelectionBtn.onclick=()=>clearDancerSelection();els.stage.addEventListener('pointerdown',event=>{if(!trajectoryEditing&&!event.target.closest('.dancer-node'))clearDancerSelection();});
   $('exportProjectBtn').onclick=exportProject;$('importProjectInput').onchange=importProjectFile;$('exportCsvBtn').onclick=exportCsv;$('exportSheetsBtn').onclick=exportSheets;

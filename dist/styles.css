@@ -464,3 +464,20 @@ legend { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; font-
   .audio-editor .timeline-heading { justify-content: flex-end; }
   .audio-editor .music-info strong { max-width: 210px; }
 }
+#selectedRouteBtn { border: 0; background: #e3ece5; color: #245b40; border-radius: 5px; padding: 3px 7px; font-size: 10px; font-weight: 700; cursor: pointer; }
+#selectedRouteBtn[hidden] { display: none; }
+#selectedRouteBtn:disabled { opacity: .55; cursor: default; }
+.trajectory-handle { color: white; font-size: 10px; font-weight: 800; padding: 0; }
+.trajectory-actions { flex-wrap: wrap; }
+.trajectory-card { grid-template-columns: minmax(0,1fr) minmax(120px,.5fr); }
+.trajectory-actions { grid-column: 1 / -1; justify-content: flex-end; }
+@media(max-width:820px){.trajectory-card { grid-template-columns: 1fr; }.trajectory-actions { grid-template-columns: 1fr 1fr; }.stage-footnote { gap: 5px; flex-wrap: wrap; }}
+.stage-frame { scroll-margin-top: 70px; }
+@media(max-width:820px){.stage-workspace:has(#selectedRouteBtn:not([hidden])) .stage-frame { max-width: min(780px, calc((100dvh - 530px) * 1.75 + 33px)); }}
+@media(max-width:820px) and (max-height:700px){
+  .audio-editor .audio-timeline { height: 116px; }
+  .audio-editor #waveform { height: 48px; }
+  .audio-editor .timeline-marker { height: 60px; }
+  .audio-editor .timeline-segment { top: 91px; }
+  .audio-editor .timeline-playhead { height: 90px; }
+}

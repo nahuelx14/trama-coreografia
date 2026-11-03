@@ -68,6 +68,7 @@ const { chromium } = require(playwrightModule);
     return { dancerId: dancer.dataset.id, x: Number(dancer.style.getPropertyValue('--x')), y: Number(dancer.style.getPropertyValue('--y')) };
   });
   const firstDancer = page.locator('.dancer-node').first();
+  await page.evaluate(()=>scrollTo(0,0));
   const dancerBox = await firstDancer.boundingBox();
   if (!dancerBox) throw new Error('No se pudo ubicar al primer bailarín.');
   await page.mouse.move(dancerBox.x + dancerBox.width / 2, dancerBox.y + dancerBox.height / 2);
@@ -137,7 +138,7 @@ const { chromium } = require(playwrightModule);
   await page.locator('#closeHistoryBtn').click();
 
   await page.locator('#trajectoryPreviewBtn').click();
-  await page.waitForTimeout(1400);
+  await page.waitForFunction(()=>document.getElementById('trajectoryPreviewBtn').textContent.includes('Probar'),{},{timeout:18000});
   const previewLabel = await page.locator('#trajectoryPreviewBtn').innerText();
   if (!previewLabel.includes('Probar')) throw new Error('La vista previa no terminó correctamente.');
 
@@ -158,7 +159,7 @@ const { chromium } = require(playwrightModule);
   for(const [width,height] of [[1366,768],[1024,768],[390,844],[390,667]]) {
     await page.setViewportSize({width,height});await page.evaluate(()=>scrollTo(0,0));
     const layout=await page.evaluate(()=>({board:document.getElementById('stageFrame').getBoundingClientRect().top,timeline:document.getElementById('audioTimeline').getBoundingClientRect().bottom}));
-    if(layout.board<60||layout.timeline>height-(width<=820?62:0))throw new Error('El pizarrón y la línea de tiempo deben verse juntos.');
+    if(layout.board<60||layout.timeline>height-(width<=820?62:0))throw new Error('El pizarrón y la línea de tiempo deben verse juntos: '+JSON.stringify({width,height,...layout}));
   }
 
   await page.setViewportSize({ width: 390, height: 844 });

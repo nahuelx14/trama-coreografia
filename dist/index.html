@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f2eb">
   <meta name="description" content="Diseñá, ordená y animá formaciones coreográficas.">
   <title>Trama — Diseñador coreográfico</title>
-  <link rel="stylesheet" href="styles.css?v=20261103-compact-editor">
+  <link rel="stylesheet" href="styles.css?v=20261103-participant-routes">
 </head>
 <body>
   <div class="app-shell">
@@ -72,7 +72,7 @@
           </div>
           <div class="stage-front" id="stageFront" aria-label="Frente del escenario"><span>FRENTE DEL ESCENARIO</span><i id="frontArrow">→</i></div>
         </div>
-        <div class="stage-footnote"><span><kbd>Ctrl</kbd> + clic para seleccionar varios</span><span>Las posiciones se guardan automáticamente</span></div>
+        <div class="stage-footnote"><span><kbd>Ctrl</kbd> + clic para seleccionar varios</span><button id="selectedRouteBtn" type="button" hidden>Editar recorrido</button></div>
 
 
 
@@ -124,6 +124,8 @@
           </label>
           <div class="trajectory-actions">
             <button class="trajectory-edit" id="trajectoryEditBtn" type="button">Editar recorrido</button>
+            <button id="trajectoryAddPointBtn" type="button" disabled>＋ Punto</button>
+            <button id="trajectoryRemovePointBtn" type="button" disabled>− Último punto</button>
             <button class="trajectory-reset" id="trajectoryResetBtn" type="button" disabled>↗ Recta</button>
             <button class="trajectory-preview" id="trajectoryPreviewBtn" type="button">▶ Probar</button>
           </div>
