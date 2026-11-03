@@ -8,6 +8,7 @@ const { chromium } = require(playwrightModule);
 (async () => {
   const browser = await chromium.launch({ headless: true, executablePath: process.env.TRAMA_BROWSER_EXECUTABLE || chromium.executablePath() });
   const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+  const wav=Buffer.alloc(1644);wav.write('RIFF');wav.writeUInt32LE(1636,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(1600,40);
   const audioPath = 'user-1/coreo-1/audio-principal.mp3';
   const mockSupabase = `
     window.__cloudUpdates = [];
@@ -35,7 +36,7 @@ const { chromium } = require(playwrightModule);
       return {
         auth: { getSession: async () => ({ data: { session: { user: { id: 'user-1', email: 'emi@example.com' } } }, error: null }), onAuthStateChange() {} },
         from: () => query(),
-        storage: { from: () => ({ createSignedUrl: async path => ({ data: { signedUrl: 'data:audio/mpeg;base64,SUQz' }, error: path === '${audioPath}' ? null : new Error('Ruta incorrecta') }) }) }
+        storage: { from: () => ({ createSignedUrl: async path => ({ data: { signedUrl: 'data:audio/wav;base64,${wav.toString('base64')}' }, error: path === '${audioPath}' ? null : new Error('Ruta incorrecta') }) }) }
       };
     }};
   `;

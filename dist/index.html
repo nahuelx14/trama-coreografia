@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f2eb">
   <meta name="description" content="Diseñá, ordená y animá formaciones coreográficas.">
   <title>Trama — Diseñador coreográfico</title>
-  <link rel="stylesheet" href="styles.css?v=20261102-free-facing">
+  <link rel="stylesheet" href="styles.css?v=20261103-compact-editor">
 </head>
 <body>
   <div class="app-shell">
@@ -73,6 +73,38 @@
           <div class="stage-front" id="stageFront" aria-label="Frente del escenario"><span>FRENTE DEL ESCENARIO</span><i id="frontArrow">→</i></div>
         </div>
         <div class="stage-footnote"><span><kbd>Ctrl</kbd> + clic para seleccionar varios</span><span>Las posiciones se guardan automáticamente</span></div>
+
+
+
+
+        <section class="music-card audio-editor" id="musicDisclosure" aria-label="Editor de música y formaciones">
+          <details class="song-options" id="songOptions">
+          <summary class="music-summary" title="Abrir biblioteca de canciones">
+            <div class="music-info">
+              <span class="music-icon" aria-hidden="true">♪</span>
+              <div><span class="eyebrow" id="musicEyebrow">MÚSICA LOCAL</span><strong id="musicFileName">Sumá la canción de la rutina</strong><small id="musicPrivacy">Si la coreografía está en la nube, el MP3 también se sincroniza.</small></div>
+            </div>
+            <span class="song-options-label">Canciones ▾</span>
+          </summary>
+            <div class="song-library"><label for="songSelect">Canciones guardadas <small>En este navegador</small></label><select id="songSelect" aria-label="Canción de trabajo"><option value="">Cargá una canción</option></select><label class="file-button" for="audioInput"><span id="fileButtonText">Agregar canciones</span><input id="audioInput" type="file" accept="audio/mpeg,audio/mp3,.mp3" multiple></label></div>
+          </details>
+          <div class="music-card-body">
+
+            <div class="music-transport">
+              <button class="audio-play" id="audioPlayBtn" type="button" disabled aria-label="Reproducir música">▶</button>
+              <span id="audioCurrent">0:00</span>
+              <input id="audioSeek" type="range" min="0" max="100" value="0" step="0.05" disabled aria-label="Posición de la canción">
+              <span id="audioDuration">0:00</span>
+            </div>
+            <canvas id="spectrum" height="48" aria-label="Espectro de frecuencias de la canción"></canvas>
+            <div class="timeline-heading"><strong>Música y formaciones</strong><button id="addCueBtn" type="button" disabled>＋ Formación en este punto</button></div>
+            <p class="timeline-help">Hacé clic para recorrer la canción. Arrastrá cada marca para ajustar la llegada a esa formación.</p>
+            <div class="timeline-scroll"><div id="audioTimeline" class="audio-timeline"><div id="timelineRuler" class="timeline-ruler"></div><canvas id="waveform" height="100" aria-label="Forma de onda de la canción"></canvas><div id="timelineSegments" class="timeline-segments"></div><div id="timelineMarkers"></div><div id="timelinePlayhead" class="timeline-playhead"><span></span></div></div></div>
+            <p id="waveformStatus" class="timeline-help" role="status">Cargá una canción para ver su onda y marcar las formaciones.</p>
+            <audio id="audio" preload="metadata" crossorigin="anonymous"></audio>
+          </div>
+        </section>
+
         <div class="selection-toolbar" id="selectionToolbar" hidden aria-live="polite">
           <div class="selection-copy"><span class="eyebrow">SELECCIÓN</span><strong id="selectionCount">1 bailarín seleccionado</strong><small id="selectionHint">Arrastralo para moverlo.</small></div>
           <div class="selection-actions">
@@ -81,7 +113,6 @@
             <button id="clearDancerSelectionBtn" type="button">Quitar selección</button>
           </div>
         </div>
-
         <section class="trajectory-card" id="trajectoryCard" aria-label="Trayectoria entre formaciones">
           <div class="trajectory-copy">
             <span class="eyebrow">TRAYECTORIA</span>
@@ -97,25 +128,6 @@
             <button class="trajectory-preview" id="trajectoryPreviewBtn" type="button">▶ Probar</button>
           </div>
         </section>
-
-        <details class="music-card disclosure-card" id="musicDisclosure">
-          <summary class="music-summary" aria-label="Mostrar u ocultar opciones de música">
-            <div class="music-info">
-              <span class="music-icon" aria-hidden="true">♪</span>
-              <div><span class="eyebrow" id="musicEyebrow">MÚSICA LOCAL</span><strong id="musicFileName">Sumá la canción de la rutina</strong><small id="musicPrivacy">Si la coreografía está en la nube, el MP3 también se sincroniza.</small></div>
-            </div>
-          </summary>
-          <div class="music-card-body">
-            <label class="file-button" for="audioInput"><span id="fileButtonText">Elegir MP3</span><input id="audioInput" type="file" accept="audio/mpeg,audio/mp3,.mp3"></label>
-            <div class="music-transport">
-              <button class="audio-play" id="audioPlayBtn" type="button" disabled aria-label="Reproducir música">▶</button>
-              <span id="audioCurrent">0:00</span>
-              <input id="audioSeek" type="range" min="0" max="100" value="0" step="0.05" disabled aria-label="Posición de la canción">
-              <span id="audioDuration">0:00</span>
-            </div>
-            <audio id="audio" preload="metadata"></audio>
-          </div>
-        </details>
 
         <section class="playback-card" aria-label="Reproducción">
           <div class="play-controls">
@@ -259,6 +271,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20261102-free-facing"></script>
+  <script src="app.js?v=20261103-audio-timeline"></script>
 </body>
 </html>

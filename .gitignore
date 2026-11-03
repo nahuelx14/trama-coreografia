@@ -15,3 +15,7 @@ node_modules/
 .env.*
 !.env.example
 
+
+# Capturas de las pruebas del editor
+audio-editor-desktop.png
+audio-editor-mobile.png

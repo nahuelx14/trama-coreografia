@@ -27,7 +27,12 @@ Aplicación pública: <https://nahuelx14.github.io/trama-coreografia/>
 - MP3 privados sincronizados entre dispositivos mediante Supabase Storage.
 - Trayectorias rectas o curvas configurables para cada bailarín entre dos formaciones.
 - Historial local de hasta 40 cambios, con acceso rápido para deshacer y opción de rehacer.
-- Paneles plegables de Música y Archivo para mantener despejada la mesa de trabajo.
+- Editor de música siempre visible con biblioteca local de varios MP3 (IndexedDB), forma de onda y espectro de frecuencias en vivo.
+- Línea de tiempo con cursor de reproducción y cortes arrastrables o ajustables con flechas (0,1 s; Shift: 1 s).
+- F1 fija al inicio, creación de formaciones en el cursor y duración visible entre cada par de marcas.
+- Panel plegable de Archivo.
+
+La biblioteca completa de canciones se guarda en este navegador. La canción activa conserva la sincronización con Supabase; los archivos de la biblioteca no se incluyen en la exportación del proyecto.
 - Pizarra con tamaño estable y respuesta proporcional al zoom del navegador.
 
 ## Ejecutar localmente

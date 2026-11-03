@@ -22,11 +22,11 @@ const { chromium } = require(playwrightModule);
   if (!(await page.locator('#trajectoryEditBtn').isVisible())) throw new Error('No aparece el editor de trayectorias.');
   if (!(await page.locator('#historyBtn').isVisible())) throw new Error('No aparece el acceso al historial.');
   if (!(await page.locator('#undoBtn').isDisabled())) throw new Error('Deshacer debería comenzar desactivado.');
-  if (await page.locator('#musicDisclosure').getAttribute('open') !== null || await page.locator('#archiveDisclosure').getAttribute('open') !== null) throw new Error('Música y Archivo deberían comenzar plegados.');
-  if (await page.locator('#audioInput').isVisible() || await page.locator('#exportProjectBtn').isVisible()) throw new Error('Las opciones plegadas siguen ocupando espacio.');
-  await page.locator('#musicDisclosure > summary').click();
-  if (!(await page.locator('.file-button').isVisible())) throw new Error('Música no desplegó sus opciones.');
-  await page.locator('#musicDisclosure > summary').click();
+  if (!(await page.locator('#audioTimeline').isVisible())) throw new Error('La línea de tiempo debe estar visible.');
+  await page.locator('#songOptions summary').click();
+  if (!(await page.locator('.file-button').isVisible())) throw new Error('No aparece la carga de canciones.');
+  await page.locator('#songOptions summary').click();
+  if (await page.locator('#archiveDisclosure').getAttribute('open') !== null || await page.locator('#exportProjectBtn').isVisible()) throw new Error('Archivo debería comenzar plegado.');
   await page.locator('#archiveDisclosure > summary').click();
   if (!(await page.locator('#exportProjectBtn').isVisible())) throw new Error('Archivo no desplegó sus opciones.');
   await page.locator('#archiveDisclosure > summary').click();
@@ -155,7 +155,11 @@ const { chromium } = require(playwrightModule);
     at125PercentPhysical: zoom125CanvasWidth * 1.25,
   };
   if (zoom80CanvasWidth > 781 || zoom67CanvasWidth > 781) throw new Error('La pizarra supera su nuevo ancho máximo.');
-  if (zoomLayout.at80PercentPhysical > baseCanvasWidth + 2 || zoomLayout.at67PercentPhysical > baseCanvasWidth + 2 || zoomLayout.at125PercentPhysical > baseCanvasWidth + 8) throw new Error('La pizarra no acompaña correctamente el zoom del navegador.');
+  for(const [width,height] of [[1366,768],[1024,768],[390,844],[390,667]]) {
+    await page.setViewportSize({width,height});await page.evaluate(()=>scrollTo(0,0));
+    const layout=await page.evaluate(()=>({board:document.getElementById('stageFrame').getBoundingClientRect().top,timeline:document.getElementById('audioTimeline').getBoundingClientRect().bottom}));
+    if(layout.board<60||layout.timeline>height-(width<=820?62:0))throw new Error('El pizarrón y la línea de tiempo deben verse juntos.');
+  }
 
   await page.setViewportSize({ width: 390, height: 844 });
   const mobile = await page.evaluate(() => ({
